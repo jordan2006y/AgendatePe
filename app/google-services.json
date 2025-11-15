@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "966542507563",
+    "project_id": "agendatepe",
+    "storage_bucket": "agendatepe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:966542507563:android:27484bbfacb005c30ff46e",
+        "android_client_info": {
+          "package_name": "com.example.agendatepe"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "966542507563-470lfb62j1arocs32g4rdv3nqtir3tjk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.agendatepe",
+            "certificate_hash": "7b00002c710138dc9e4ec48c34a9c6b3ab73e6bc"
+          }
+        },
+        {
+          "client_id": "966542507563-u887qkq92gh3oeda403jc4a93odffugd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAF1kQBTmaxEtRDTkSenYFW40AvaXcOF_0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "966542507563-u887qkq92gh3oeda403jc4a93odffugd.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
