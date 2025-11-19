@@ -8,11 +8,13 @@ espressoCore = "3.7.0"
 lifecycleRuntimeKtx = "2.9.4"
 activityCompose = "1.11.0"
 composeBom = "2024.09.00"
-firebaseBom = "33.1.1"
+firebaseBom = "33.2.0" # CORREGIDO (era 33.1.1)
 services ="4.4.2"
 crashlytics = "3.0.2"
 navigationCompose = "2.7.7"
-
+playServicesAuth = "21.2.0" # AÑADIDO para Google Sign-In
+playServicesLocation = "21.2.0"
+foundation = "1.9.4"  # <--- AGREGA ESTA
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -34,8 +36,17 @@ firebaseBom = { module = "com.google.firebase:firebase-bom", version.ref = "fire
 firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics"}
 firebase-auth = { module = "com.google.firebase:firebase-auth-ktx" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
-
-
+firebase-firestore = { module = "com.google.firebase:firebase-firestore-ktx" }
+coil-compose = { module = "io.coil-kt:coil-compose", version = "2.6.0" }
+androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+firebase-storage = { module = "com.google.firebase:firebase-storage-ktx" }
+google-maps-compose = { module = "com.google.maps.android:maps-compose", version = "4.3.3" }
+play-services-maps = { module = "com.google.android.gms:play-services-maps", version = "18.2.0" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" } # <--- Y ESTA
+androidx-runtime-livedata = { group = "androidx.compose.runtime", name = "runtime-livedata", version = "1.6.0" }
+# AÑADIDO para Google Sign-In
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -43,4 +54,3 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 googleServices = { id = "com.google.gms.google-services", version.ref = "services" }
 crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "crashlytics" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-
