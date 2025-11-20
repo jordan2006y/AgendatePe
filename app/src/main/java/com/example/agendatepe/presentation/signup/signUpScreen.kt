@@ -17,7 +17,10 @@ import com.example.agendatepe.ui.theme.* // Importa tus colores (Azul, Crema, bl
 
 @Composable
 // 1. Recibe una función que acepta (email, password)
-fun SingUpScreen(navigateToProfile: (String, String) -> Unit) {
+fun SingUpScreen(
+    navigateToProfile: (String, String) -> Unit,
+    onBack: () -> Unit // <-- AÑADIDO: Función para volver atrás
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -30,12 +33,17 @@ fun SingUpScreen(navigateToProfile: (String, String) -> Unit) {
     ) {
         Spacer(modifier = Modifier.height(30.dp))
         Row {
-            Icon(
-                painterResource(id = R.drawable.back),
-                contentDescription = "Atrás",
-                tint = Color.White,
+            // CORREGIDO: Usar IconButton y onBack
+            IconButton(
+                onClick = onBack,
                 modifier = Modifier.padding(vertical = 24.dp).size(24.dp)
-            )
+            ) {
+                Icon(
+                    painterResource(id = R.drawable.back),
+                    contentDescription = "Atrás",
+                    tint = Color.White
+                )
+            }
             Spacer(modifier = Modifier.weight(1f))
         }
 

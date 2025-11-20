@@ -43,15 +43,22 @@ fun NavigationWrapper(
         // ... (Resto de rutas igual) ...
 
         composable("logIn"){
-            LoginScreen(auth, navigateToHome = {
-                navHostController.navigate("home") { popUpTo("initialScreen") { inclusive = true } }
-            })
+            LoginScreen(
+                auth,
+                navigateToHome = {
+                    navHostController.navigate("home") { popUpTo("initialScreen") { inclusive = true } }
+                },
+                onBack = { navHostController.popBackStack() } // <-- CORREGIDO
+            )
         }
 
         composable("SignUp"){
-            SingUpScreen { email, password ->
-                navHostController.navigate("profile/$email/$password")
-            }
+            SingUpScreen(
+                navigateToProfile = { email, password ->
+                    navHostController.navigate("profile/$email/$password")
+                },
+                onBack = { navHostController.popBackStack() } // <-- CORREGIDO
+            )
         }
 
         // Esta ruta ahora sirve tanto para Registro Email como para Google Setup

@@ -17,8 +17,12 @@ import com.example.agendatepe.ui.theme.*
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-// 1. AGREGAMOS EL PARÁMETRO DE NAVEGACIÓN
-fun LoginScreen(auth: FirebaseAuth, navigateToHome: () -> Unit) {
+// 1. AGREGAMOS LOS PARÁMETROS DE NAVEGACIÓN
+fun LoginScreen(
+    auth: FirebaseAuth,
+    navigateToHome: () -> Unit,
+    onBack: () -> Unit // <-- AÑADIDO: Función para volver atrás
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -32,12 +36,17 @@ fun LoginScreen(auth: FirebaseAuth, navigateToHome: () -> Unit) {
         // ... (Resto del diseño igual: Icono, Textos, TextFields) ...
         Spacer(modifier = Modifier.height(30.dp))
         Row {
-            Icon(
-                painterResource(id = R.drawable.back),
-                contentDescription = "",
-                tint = White,
+            // CORREGIDO: Usar IconButton y onBack
+            IconButton(
+                onClick = onBack, // <-- Llama a la función de regreso
                 modifier = Modifier.padding(vertical = 24.dp).size(24.dp)
-            )
+            ) {
+                Icon(
+                    painterResource(id = R.drawable.back),
+                    contentDescription = "",
+                    tint = White
+                )
+            }
             Spacer(modifier = Modifier.weight(1f))
         }
 
