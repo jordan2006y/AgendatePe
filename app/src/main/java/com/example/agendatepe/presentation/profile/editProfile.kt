@@ -2,6 +2,7 @@ package com.example.agendatepe.presentation.profile
 
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
@@ -53,6 +54,22 @@ fun EditProfileScreen(
     var isLoading by remember { mutableStateOf(true) }
     var showChangeEmailDialog by remember { mutableStateOf(false) }
 
+    // --- PROTECCIÓN DE SALIDA ---
+    var showExitDialog by remember { mutableStateOf(false) }
+    BackHandler { showExitDialog = true }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("¿Salir sin guardar?") },
+            text = { Text("Si sales ahora, perderás los cambios en tu perfil.") },
+            confirmButton = { Button(onClick = { showExitDialog = false; navigateToHome() }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Salir", color = Color.White) } },
+            dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Cancelar", color = black) } },
+            containerColor = Color.White
+        )
+    }
+    // ----------------------------
+
     var isGoogleUser by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -95,7 +112,7 @@ fun EditProfileScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            IconButton(onClick = { navigateToHome() }) { Icon(Icons.Default.ArrowBack, null, tint = Color.White) }
+            IconButton(onClick = { showExitDialog = true }) { Icon(Icons.Default.ArrowBack, null, tint = Color.White) }
             Spacer(modifier = Modifier.weight(1f))
             Text("Mi Perfil", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.weight(1f))
@@ -135,18 +152,16 @@ fun EditProfileScreen(
             Text("Teléfono (9 dígitos)", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
             Spacer(modifier = Modifier.height(8.dp))
 
-            // --- CAMPO DE TELÉFONO CON LÓGICA ---
             TextField(
                 value = phone,
                 onValueChange = { input ->
-                    // 1. Solo permitir números y máximo 9 dígitos
                     if (input.all { it.isDigit() } && input.length <= 9) {
                         phone = input
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), // Teclado numérico
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.White, unfocusedContainerColor = Color.White,
                     focusedTextColor = black, unfocusedTextColor = black
@@ -169,7 +184,6 @@ fun EditProfileScreen(
 
             Button(
                 onClick = {
-                    // 2. VALIDACIÓN AL GUARDAR
                     if (name.isEmpty()) {
                         Toast.makeText(context, "Ingresa tu nombre", Toast.LENGTH_SHORT).show()
                         return@Button

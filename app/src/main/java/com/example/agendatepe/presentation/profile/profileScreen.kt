@@ -2,6 +2,7 @@ package com.example.agendatepe.presentation.profile
 
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
@@ -45,7 +46,23 @@ fun ProfileScreen(
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // Lógica de Google Login
+    // --- PROTECCIÓN DE SALIDA ---
+    var showExitDialog by remember { mutableStateOf(false) }
+    // Como esta es una pantalla "intermedia" de registro, el "atrás" podría ser cancelar registro.
+    BackHandler { showExitDialog = true }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("¿Cancelar registro?") },
+            text = { Text("Si sales ahora, no se completará tu perfil.") },
+            confirmButton = { Button(onClick = { showExitDialog = false; /* No hay navegación atrás clara aquí, pero podríamos cerrar app o ir a login */ }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Salir", color = Color.White) } },
+            dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Continuar Editando", color = black) } },
+            containerColor = Color.White
+        )
+    }
+    // ----------------------------
+
     val googleUser = auth.currentUser
     val isGoogleLogin = passwordRecibido == "GOOGLE_LOGIN" || (googleUser != null && passwordRecibido.isEmpty())
 
@@ -77,7 +94,6 @@ fun ProfileScreen(
         )
         Spacer(modifier = Modifier.height(32.dp))
 
-        // FOTO
         Box(
             modifier = Modifier
                 .size(120.dp)
@@ -104,7 +120,6 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // NOMBRE
         Text("Nombre Completo", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
         Spacer(modifier = Modifier.height(8.dp))
         TextField(
@@ -120,23 +135,19 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // TELÉFONO (AHORA CON LÍMITE DE 9 DÍGITOS)
         Text("Número de Telefono", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
         Spacer(modifier = Modifier.height(8.dp))
 
         TextField(
             value = phone,
             onValueChange = { input ->
-                // --- LÓGICA DE VALIDACIÓN ---
-                // 1. Solo si es número (isDigit)
-                // 2. Solo si tiene 9 dígitos o menos
                 if (input.all { it.isDigit() } && input.length <= 9) {
                     phone = input
                 }
             },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), // Teclado numérico
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Crema,
                 unfocusedContainerColor = Crema,
@@ -149,13 +160,12 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // BOTÓN GUARDAR
         if (isLoading) {
             CircularProgressIndicator(color = Crema)
         } else {
             Button(
                 onClick = {
-                    if (name.isNotEmpty() && phone.length == 9) { // Validamos que tenga exactamente 9
+                    if (name.isNotEmpty() && phone.length == 9) {
                         isLoading = true
 
                         fun saveFirestoreData(uid: String) {

@@ -1,5 +1,6 @@
 package com.example.agendatepe.presentation.signup
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,32 +9,32 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.agendatepe.R
-import com.example.agendatepe.ui.theme.* // Importa tus colores (Azul, Crema, black, White)
+import com.example.agendatepe.ui.theme.*
 
 @Composable
-// 1. Recibe una función que acepta (email, password)
 fun SingUpScreen(
     navigateToProfile: (String, String) -> Unit,
-    onBack: () -> Unit // <-- AÑADIDO: Función para volver atrás
+    onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(color = Azul) // Tu Azul
+            .background(color = Azul)
             .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(30.dp))
         Row {
-            // CORREGIDO: Usar IconButton y onBack
             IconButton(
                 onClick = onBack,
                 modifier = Modifier.padding(vertical = 24.dp).size(24.dp)
@@ -73,18 +74,22 @@ fun SingUpScreen(
 
         Spacer(Modifier.height(48.dp))
 
-        // --- BOTÓN CREMA CON LETRAS NEGRAS ---
         Button(
             onClick = {
-                // Validamos que no estén vacíos antes de pasar
                 if (email.isNotEmpty() && password.isNotEmpty()) {
-                    navigateToProfile(email, password) // ¡Pasamos los datos!
+                    if (password.length >= 6) {
+                        navigateToProfile(email, password)
+                    } else {
+                        Toast.makeText(context, "La contraseña debe tener al menos 6 caracteres", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(context, "Completa todos los datos", Toast.LENGTH_SHORT).show()
                 }
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Crema) // FONDO CREMA
+            colors = ButtonDefaults.buttonColors(containerColor = Crema)
         ) {
-            Text(text = "Continuar", color = black, fontWeight = FontWeight.Bold) // LETRAS NEGRAS
+            Text(text = "Continuar", color = black, fontWeight = FontWeight.Bold)
         }
     }
 }

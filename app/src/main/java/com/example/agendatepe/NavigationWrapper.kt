@@ -1,12 +1,12 @@
 package com.example.agendatepe
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-// ... Tus imports ...
 import com.example.agendatepe.presentation.initial.InitialScreen
 import com.example.agendatepe.presentation.login.LoginScreen
 import com.example.agendatepe.presentation.profile.EditProfileScreen
@@ -16,6 +16,8 @@ import com.example.agendatepe.presentation.home.HomeScreen
 import com.example.agendatepe.presentation.home.LocationPickerScreen
 import com.example.agendatepe.presentation.home.PublishPropertyScreen
 import com.google.firebase.auth.FirebaseAuth
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 
 @Composable
 fun NavigationWrapper(
@@ -23,6 +25,8 @@ fun NavigationWrapper(
     auth: FirebaseAuth,
     startDestination: String
 ) {
+    val context = LocalContext.current
+
     NavHost(navController = navHostController, startDestination = startDestination) {
 
         composable("initialScreen") {
@@ -32,7 +36,6 @@ fun NavigationWrapper(
                 navigateToHome = {
                     navHostController.navigate("home") { popUpTo("initialScreen") { inclusive = true } }
                 },
-                // AQUÍ ESTÁ EL CAMBIO: MANDAMOS A 'profile' CON CONTRASEÑA FALSA
                 navigateToProfileSetup = {
                     val email = auth.currentUser?.email ?: "user"
                     navHostController.navigate("profile/$email/GOOGLE_LOGIN")
@@ -40,15 +43,13 @@ fun NavigationWrapper(
             )
         }
 
-        // ... (Resto de rutas igual) ...
-
         composable("logIn"){
             LoginScreen(
                 auth,
                 navigateToHome = {
                     navHostController.navigate("home") { popUpTo("initialScreen") { inclusive = true } }
                 },
-                onBack = { navHostController.popBackStack() } // <-- CORREGIDO
+                onBack = { navHostController.popBackStack() }
             )
         }
 
@@ -57,11 +58,10 @@ fun NavigationWrapper(
                 navigateToProfile = { email, password ->
                     navHostController.navigate("profile/$email/$password")
                 },
-                onBack = { navHostController.popBackStack() } // <-- CORREGIDO
+                onBack = { navHostController.popBackStack() }
             )
         }
 
-        // Esta ruta ahora sirve tanto para Registro Email como para Google Setup
         composable(
             route = "profile/{email}/{password}",
             arguments = listOf(navArgument("email") { type = NavType.StringType }, navArgument("password") { type = NavType.StringType })
@@ -79,7 +79,23 @@ fun NavigationWrapper(
         composable("home") {
             HomeScreen(
                 navigateToProfile = { navHostController.navigate("edit_profile") },
-                onLogout = { auth.signOut(); navHostController.navigate("initialScreen") { popUpTo(0) { inclusive = true } } },
+                onLogout = {
+                    // --- CORRECCIÓN: CERRAR SESIÓN DE GOOGLE + FIREBASE ---
+                    val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                        .requestIdToken("966542507563-u887qkq92gh3oeda403jc4a93odffugd.apps.googleusercontent.com")
+                        .requestEmail()
+                        .build()
+
+                    val googleSignInClient = GoogleSignIn.getClient(context, gso)
+
+                    // 1. Cerramos sesión en el cliente de Google para olvidar la cuenta
+                    googleSignInClient.signOut().addOnCompleteListener {
+                        // 2. Cerramos sesión en Firebase
+                        auth.signOut()
+                        // 3. Volvemos al inicio
+                        navHostController.navigate("initialScreen") { popUpTo(0) { inclusive = true } }
+                    }
+                },
                 navigateToPublish = { tipo -> navHostController.navigate("publish/$tipo") }
             )
         }

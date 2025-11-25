@@ -1,6 +1,7 @@
 package com.example.agendatepe.presentation.home
 
 import android.location.Address
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -54,23 +55,18 @@ fun LocationPickerScreen(
     var currentCenter by remember { mutableStateOf(defaultLocation) }
     var addressText by remember { mutableStateOf("Mueve el mapa para ver la dirección...") }
 
-    // Estados de Búsqueda
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<Address>>(emptyList()) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
-    // --- FUNCIÓN OPTIMIZADA: Búsqueda rápida ---
     fun onSearchQueryChanged(query: String) {
         searchQuery = query
         searchJob?.cancel()
-
         if (query.isBlank()) {
             searchResults = emptyList()
             return
         }
-
         searchJob = scope.launch {
-            // TRUCO: Solo 300ms de espera. Se siente casi instantáneo.
             delay(300)
             searchResults = LocationHelper.searchPlaces(context, query)
         }
@@ -78,18 +74,15 @@ fun LocationPickerScreen(
 
     fun selectLocation(location: Address) {
         keyboardController?.hide()
-        searchQuery = "" // Limpiar al seleccionar para ver el mapa limpio
+        searchQuery = ""
         searchResults = emptyList()
-
         scope.launch {
             val latLng = LatLng(location.latitude, location.longitude)
             cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 16f), 1000)
-
             val street = location.thoroughfare ?: ""
             val number = location.subThoroughfare ?: ""
             val district = location.subLocality ?: location.locality ?: ""
             val fullAddress = if (street.isNotEmpty()) "$street $number, $district" else district
-
             addressText = fullAddress.ifEmpty { location.featureName ?: "Ubicación seleccionada" }
         }
     }
@@ -97,7 +90,6 @@ fun LocationPickerScreen(
     fun searchLocationManual() {
         if (searchQuery.isBlank()) return
         keyboardController?.hide()
-
         scope.launch {
             val results = LocationHelper.searchPlaces(context, searchQuery)
             if (results.isNotEmpty()) {
@@ -116,6 +108,14 @@ fun LocationPickerScreen(
     LaunchedEffect(cameraPositionState.isMoving) {
         if (!cameraPositionState.isMoving) {
             currentCenter = cameraPositionState.position.target
+            val lat = currentCenter.latitude
+            val lng = currentCenter.longitude
+
+            // LÍMITES DE LIMA (Aprox)
+            if (lat > -11.5 || lat < -12.6 || lng > -76.5 || lng < -77.3) {
+                Toast.makeText(context, "⚠️ Estás saliendo de la zona de cobertura (Lima)", Toast.LENGTH_SHORT).show()
+            }
+
             updateAddressFromMap(currentCenter)
         } else {
             addressText = "Buscando..."
@@ -123,14 +123,12 @@ fun LocationPickerScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // MAPA
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
             uiSettings = MapUiSettings(zoomControlsEnabled = false)
         )
 
-        // UI SUPERIOR
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -141,9 +139,7 @@ fun LocationPickerScreen(
                 value = searchQuery,
                 onValueChange = { onSearchQueryChanged(it) },
                 placeholder = { Text("Escribe calle o distrito...", color = Color.Gray) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(4.dp, RoundedCornerShape(12.dp)),
+                modifier = Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(12.dp)),
                 shape = RoundedCornerShape(12.dp),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.White,
@@ -156,13 +152,9 @@ fun LocationPickerScreen(
                 ),
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { onSearchQueryChanged("") }) {
-                            Icon(Icons.Default.Close, null, tint = Color.Gray)
-                        }
+                        IconButton(onClick = { onSearchQueryChanged("") }) { Icon(Icons.Default.Close, null, tint = Color.Gray) }
                     } else {
-                        IconButton(onClick = { searchLocationManual() }) {
-                            Icon(Icons.Default.Search, null, tint = Azul)
-                        }
+                        IconButton(onClick = { searchLocationManual() }) { Icon(Icons.Default.Search, null, tint = Azul) }
                     }
                 },
                 singleLine = true,
@@ -170,7 +162,6 @@ fun LocationPickerScreen(
                 keyboardActions = KeyboardActions(onSearch = { searchLocationManual() })
             )
 
-            // LISTA DE RESULTADOS (Ahora muestra hasta 20 resultados scrollables)
             if (searchResults.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 LazyColumn(
@@ -178,15 +169,13 @@ fun LocationPickerScreen(
                         .fillMaxWidth()
                         .background(Color.White, RoundedCornerShape(8.dp))
                         .shadow(8.dp, RoundedCornerShape(8.dp))
-                        .heightIn(max = 300.dp) // Más altura para ver las 20 opciones
+                        .heightIn(max = 300.dp)
                 ) {
                     items(searchResults) { address ->
                         val title = address.featureName ?: address.thoroughfare ?: "Ubicación"
                         val district = address.subLocality ?: address.locality ?: ""
                         val city = address.adminArea ?: ""
-                        val subtitle = listOf(district, city)
-                            .filter { it.isNotEmpty() && it != title }
-                            .joinToString(", ")
+                        val subtitle = listOf(district, city).filter { it.isNotEmpty() && it != title }.joinToString(", ")
 
                         Row(
                             modifier = Modifier
@@ -211,18 +200,13 @@ fun LocationPickerScreen(
             }
         }
 
-        // PIN CENTRAL
         Icon(
             imageVector = Icons.Default.LocationOn,
             contentDescription = null,
             tint = Color.Red,
-            modifier = Modifier
-                .size(48.dp)
-                .align(Alignment.Center)
-                .offset(y = (-24).dp)
+            modifier = Modifier.size(48.dp).align(Alignment.Center).offset(y = (-24).dp)
         )
 
-        // PANEL INFERIOR
         Surface(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
             color = Color.White,

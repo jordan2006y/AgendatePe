@@ -1,13 +1,17 @@
 package com.example.agendatepe.presentation.login
 
 import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Color.Companion.White
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -17,14 +21,30 @@ import com.example.agendatepe.ui.theme.*
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-// 1. AGREGAMOS LOS PARÁMETROS DE NAVEGACIÓN
 fun LoginScreen(
     auth: FirebaseAuth,
     navigateToHome: () -> Unit,
-    onBack: () -> Unit // <-- AÑADIDO: Función para volver atrás
+    onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+
+    // --- PROTECCIÓN DE SALIDA ---
+    var showExitDialog by remember { mutableStateOf(false) }
+    BackHandler { showExitDialog = true }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("¿Cancelar inicio de sesión?") },
+            text = { Text("Se perderán los datos ingresados.") },
+            confirmButton = { Button(onClick = { showExitDialog = false; onBack() }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Salir", color = Color.White) } },
+            dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Continuar", color = black) } },
+            containerColor = Color.White
+        )
+    }
+    // ----------------------------
 
     Column(
         modifier = Modifier
@@ -33,12 +53,10 @@ fun LoginScreen(
             .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // ... (Resto del diseño igual: Icono, Textos, TextFields) ...
         Spacer(modifier = Modifier.height(30.dp))
         Row {
-            // CORREGIDO: Usar IconButton y onBack
             IconButton(
-                onClick = onBack, // <-- Llama a la función de regreso
+                onClick = { showExitDialog = true }, // Activamos dialogo aquí
                 modifier = Modifier.padding(vertical = 24.dp).size(24.dp)
             ) {
                 Icon(
@@ -73,14 +91,18 @@ fun LoginScreen(
 
         Button(
             onClick = {
-                auth.signInWithEmailAndPassword(email, password).addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.i("aris", "Login Ok")
-                        // 2. ¡NAVEGAMOS AL HOME!
-                        navigateToHome()
-                    } else {
-                        Log.i("aris", "Login Fail")
+                if (email.isNotEmpty() && password.isNotEmpty()) {
+                    auth.signInWithEmailAndPassword(email, password).addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            Log.i("aris", "Login Ok")
+                            navigateToHome()
+                        } else {
+                            Log.i("aris", "Login Fail")
+                            Toast.makeText(context, "Error: Cuenta no existe o datos incorrectos", Toast.LENGTH_SHORT).show()
+                        }
                     }
+                } else {
+                    Toast.makeText(context, "Llene todos los campos", Toast.LENGTH_SHORT).show()
                 }
             },
             colors = ButtonDefaults.buttonColors(containerColor = Crema)
