@@ -8,13 +8,15 @@ espressoCore = "3.7.0"
 lifecycleRuntimeKtx = "2.9.4"
 activityCompose = "1.11.0"
 composeBom = "2024.09.00"
-firebaseBom = "33.2.0" # CORREGIDO (era 33.1.1)
+firebaseBom = "33.2.0"
 services ="4.4.2"
 crashlytics = "3.0.2"
 navigationCompose = "2.7.7"
-playServicesAuth = "21.2.0" # AÑADIDO para Google Sign-In
+playServicesAuth = "21.2.0"
 playServicesLocation = "21.2.0"
-foundation = "1.9.4"  # <--- AGREGA ESTA
+foundation = "1.9.4"
+lifecycleViewModelCompose = "2.8.7"
+
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -47,6 +49,7 @@ androidx-runtime-livedata = { group = "androidx.compose.runtime", name = "runtim
 # AÑADIDO para Google Sign-In
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewModelCompose" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -6,11 +6,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -20,13 +21,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -34,11 +37,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.agendatepe.ui.theme.*
 import com.example.agendatepe.utils.LocationHelper
-import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -53,156 +56,65 @@ import java.util.UUID
 fun PublishPropertyScreen(
     auth: FirebaseAuth,
     tipoOperacion: String,
-    navController: NavController
+    navController: NavController,
+    viewModel: PublishPropertyViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // --- PROTECCIÓN CONTRA SALIDA ACCIDENTAL ---
+    // USAMOS EL PASO DEL VIEWMODEL (YA NO SE REINICIA)
+    val totalSteps = 4
+
+    var isLoading by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
 
-    // Intercepta el botón "Atrás" del sistema
+    // --- VALIDACIÓN DE PASOS ---
+    fun isStepValid(): Boolean {
+        return when (viewModel.currentStep) {
+            1 -> true
+            2 -> viewModel.lat != 0.0 && viewModel.address.isNotEmpty()
+            3 -> viewModel.title.isNotEmpty() && viewModel.price.isNotEmpty() && viewModel.area.isNotEmpty()
+            4 -> viewModel.selectedImages.isNotEmpty()
+            else -> false
+        }
+    }
+
+    // --- PROTECCIÓN SALIDA ---
     BackHandler {
-        showExitDialog = true
+        if (viewModel.currentStep > 1) viewModel.currentStep-- else showExitDialog = true
     }
 
     if (showExitDialog) {
         AlertDialog(
             onDismissRequest = { showExitDialog = false },
-            title = { Text("¿Salir sin publicar?") },
-            text = { Text("Si sales ahora, perderás todos los datos ingresados.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showExitDialog = false
-                        navController.popBackStack()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                ) { Text("Salir", color = Color.White) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExitDialog = false }) { Text("Cancelar", color = black) }
-            },
-            containerColor = Color.White
+            title = { Text("¿Salir?", color = MaterialTheme.colorScheme.onSurface) },
+            text = { Text("Perderás el progreso de tu publicación.", color = Color.Gray) },
+            confirmButton = { Button(onClick = { showExitDialog = false; navController.popBackStack() }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Salir", color = Color.White) } },
+            dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Continuar", color = MaterialTheme.colorScheme.onSurface) } },
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
-    // -------------------------------------------
 
-    // --- CATEGORÍA DEL INMUEBLE ---
-    val categories = listOf("Casa", "Departamento", "Oficina", "Terreno")
-    var selectedCategory by rememberSaveable { mutableStateOf(categories[0]) }
-    var expandedCategory by remember { mutableStateOf(false) }
-
-    // Datos básicos
-    var title by rememberSaveable { mutableStateOf("") }
-    var price by rememberSaveable { mutableStateOf("") }
-    var currency by rememberSaveable { mutableStateOf("S/") }
-    var description by rememberSaveable { mutableStateOf("") }
-    var area by rememberSaveable { mutableStateOf("") }
-
-    // Contadores
-    var bedrooms by rememberSaveable { mutableStateOf(1) }
-    var bathrooms by rememberSaveable { mutableStateOf(1) }
-
-    // Características
-    var hasPool by rememberSaveable { mutableStateOf(false) }
-    var hasGarage by rememberSaveable { mutableStateOf(false) }
-    var hasGarden by rememberSaveable { mutableStateOf(false) }
-    var isPetFriendly by rememberSaveable { mutableStateOf(false) }
-    var hasPapers by rememberSaveable { mutableStateOf(false) }
-
-    // Fotos extras
-    var poolUri by remember { mutableStateOf<Uri?>(null) }
-    var garageUri by remember { mutableStateOf<Uri?>(null) }
-    var gardenUri by remember { mutableStateOf<Uri?>(null) }
-
-    // Ubicación
-    var address by rememberSaveable { mutableStateOf("") }
-    var lat by rememberSaveable { mutableStateOf(0.0) }
-    var lng by rememberSaveable { mutableStateOf(0.0) }
-    var locationStatus by rememberSaveable { mutableStateOf("Sin ubicación seleccionada") }
-
-    var searchResults by remember { mutableStateOf<List<android.location.Address>>(emptyList()) }
-    var searchJob by remember { mutableStateOf<Job?>(null) }
-    var selectedImages by remember { mutableStateOf<List<Uri>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(false) }
-
-    // LÓGICA DE PROTECCIÓN
-    val isTerreno = selectedCategory == "Terreno"
-    val isOficina = selectedCategory == "Oficina"
-
-    LaunchedEffect(selectedCategory) {
-        if (isTerreno) {
-            bedrooms = 0
-            bathrooms = 0
-            hasPool = false
-            hasGarage = false
-            hasGarden = false
-            isPetFriendly = false
-            poolUri = null
-            garageUri = null
-            gardenUri = null
-        } else if (isOficina) {
-            hasPool = false
-            poolUri = null
-            if (bedrooms == 0) bedrooms = 1
-            if (bathrooms == 0) bathrooms = 1
-        } else {
-            if (bedrooms == 0) bedrooms = 1
-            if (bathrooms == 0) bathrooms = 1
-        }
-    }
-
+    // --- RECUPERAR DATOS DEL MAPA ---
     val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
     val locationLat = savedStateHandle?.getLiveData<Double>("location_lat")?.observeAsState()
     val locationLng = savedStateHandle?.getLiveData<Double>("location_lng")?.observeAsState()
     val locationAddr = savedStateHandle?.getLiveData<String>("location_address")?.observeAsState()
 
-    LaunchedEffect(locationLat?.value, locationLng?.value, locationAddr?.value) {
+    LaunchedEffect(locationLat?.value, locationLng?.value) {
         if (locationLat?.value != null && locationLng?.value != null) {
-            lat = locationLat!!.value!!
-            lng = locationLng!!.value!!
-            val addr = locationAddr?.value
-            if (!addr.isNullOrEmpty() && addr != "Buscando...") {
-                address = addr
-                searchResults = emptyList()
-            }
-            locationStatus = "¡Ubicación exacta guardada!"
+            viewModel.updateLocation(locationLat!!.value!!, locationLng!!.value!!, locationAddr?.value ?: "")
             savedStateHandle.remove<Double>("location_lat")
             savedStateHandle.remove<Double>("location_lng")
             savedStateHandle.remove<String>("location_address")
         }
     }
 
-    fun onAddressChange(newAddress: String) {
-        address = newAddress
-        searchJob?.cancel()
-        if (newAddress.isBlank()) { searchResults = emptyList(); return }
-        searchJob = scope.launch { delay(800); searchResults = LocationHelper.searchPlaces(context, newAddress) }
-    }
-
-    val carouselPicker = rememberLauncherForActivityResult(contract = ActivityResultContracts.PickMultipleVisualMedia(5)) { uris -> selectedImages = uris }
-    val poolPicker = rememberLauncherForActivityResult(contract = ActivityResultContracts.PickVisualMedia()) { uri -> poolUri = uri }
-    val garagePicker = rememberLauncherForActivityResult(contract = ActivityResultContracts.PickVisualMedia()) { uri -> garageUri = uri }
-    val gardenPicker = rememberLauncherForActivityResult(contract = ActivityResultContracts.PickVisualMedia()) { uri -> gardenUri = uri }
-
+    // --- FUNCIÓN GUARDAR ---
     fun saveProperty() {
-        if (title.isEmpty() || price.isEmpty() || lat == 0.0 || selectedImages.isEmpty()) {
-            Toast.makeText(context, "Faltan datos importantes (Título, Precio, Ubicación o Fotos)", Toast.LENGTH_SHORT).show()
-            return
+        if (!isStepValid()) {
+            Toast.makeText(context, "Completa los datos obligatorios", Toast.LENGTH_SHORT).show(); return
         }
-
-        if (!isTerreno) {
-            if (bedrooms == 0 || bathrooms == 0) {
-                Toast.makeText(context, "Una $selectedCategory debe tener al menos 1 cuarto/ambiente y 1 baño", Toast.LENGTH_LONG).show()
-                return
-            }
-        }
-        if (isOficina && hasPool) {
-            Toast.makeText(context, "Una oficina no puede tener piscina", Toast.LENGTH_SHORT).show()
-            return
-        }
-
         isLoading = true
         scope.launch {
             try {
@@ -211,11 +123,11 @@ fun PublishPropertyScreen(
                 val userPhone = userDoc.getString("phone") ?: ""
 
                 val duplicates = FirebaseFirestore.getInstance().collection("propiedades")
-                    .whereEqualTo("lat", lat).whereEqualTo("lng", lng).get().await()
+                    .whereEqualTo("lat", viewModel.lat).whereEqualTo("lng", viewModel.lng).get().await()
 
                 if (!duplicates.isEmpty) {
                     isLoading = false
-                    Toast.makeText(context, "¡Error! Propiedad duplicada en esta ubicación.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "¡Ya existe una propiedad aquí!", Toast.LENGTH_LONG).show()
                     return@launch
                 }
 
@@ -223,243 +135,206 @@ fun PublishPropertyScreen(
                 val storageRef = FirebaseStorage.getInstance().reference
 
                 val uploadedCarouselUrls = mutableListOf<String>()
-                selectedImages.forEachIndexed { index, uri ->
+                viewModel.selectedImages.forEachIndexed { index, uri ->
                     val ref = storageRef.child("propiedades/$propId/foto_$index.jpg")
                     ref.putFile(uri).await()
-                    val url = ref.downloadUrl.await().toString()
-                    uploadedCarouselUrls.add(url)
+                    uploadedCarouselUrls.add(ref.downloadUrl.await().toString())
                 }
 
-                var poolUrl = ""
-                if (hasPool && poolUri != null) {
-                    val ref = storageRef.child("propiedades/$propId/feature_pool.jpg")
-                    ref.putFile(poolUri!!).await()
-                    poolUrl = ref.downloadUrl.await().toString()
-                }
+                val poolUrl = if (viewModel.hasPool && viewModel.poolUri != null) storageRef.child("propiedades/$propId/pool.jpg").putFile(viewModel.poolUri!!).await().storage.downloadUrl.await().toString() else ""
+                val garageUrl = if (viewModel.hasGarage && viewModel.garageUri != null) storageRef.child("propiedades/$propId/garage.jpg").putFile(viewModel.garageUri!!).await().storage.downloadUrl.await().toString() else ""
+                val gardenUrl = if (viewModel.hasGarden && viewModel.gardenUri != null) storageRef.child("propiedades/$propId/garden.jpg").putFile(viewModel.gardenUri!!).await().storage.downloadUrl.await().toString() else ""
 
-                var garageUrl = ""
-                if (hasGarage && garageUri != null) {
-                    val ref = storageRef.child("propiedades/$propId/feature_garage.jpg")
-                    ref.putFile(garageUri!!).await()
-                    garageUrl = ref.downloadUrl.await().toString()
-                }
-
-                var gardenUrl = ""
-                if (hasGarden && gardenUri != null) {
-                    val ref = storageRef.child("propiedades/$propId/feature_garden.jpg")
-                    ref.putFile(gardenUri!!).await()
-                    gardenUrl = ref.downloadUrl.await().toString()
-                }
-
-                val map = hashMapOf(
-                    "id" to propId,
-                    "userId" to userId,
-                    "telefono" to userPhone,
-                    "categoria" to selectedCategory,
-                    "tipo" to tipoOperacion,
-                    "titulo" to title,
-                    "precio" to price,
-                    "moneda" to currency,
-                    "direccion" to address,
-                    "descripcion" to description,
-                    "area" to area,
-                    "habitaciones" to bedrooms,
-                    "banos" to bathrooms,
-                    "tienePiscina" to hasPool,
-                    "tieneCochera" to hasGarage,
-                    "tieneJardin" to hasGarden,
-                    "esPetFriendly" to isPetFriendly,
-                    "papelesEnRegla" to hasPapers,
-                    "fotoPiscina" to poolUrl,
-                    "fotoCochera" to garageUrl,
-                    "fotoJardin" to gardenUrl,
-                    "lat" to lat,
-                    "lng" to lng,
+                val map = hashMapOf<String, Any>(
+                    "id" to propId, "userId" to userId, "telefono" to userPhone,
+                    "categoria" to viewModel.selectedCategory, "tipo" to tipoOperacion,
+                    "titulo" to viewModel.title, "precio" to viewModel.price, "moneda" to viewModel.currency,
+                    "direccion" to viewModel.address, "descripcion" to viewModel.description, "area" to viewModel.area,
+                    "habitaciones" to viewModel.bedrooms, "banos" to viewModel.bathrooms,
+                    "tienePiscina" to viewModel.hasPool, "tieneCochera" to viewModel.hasGarage,
+                    "tieneJardin" to viewModel.hasGarden, "esPetFriendly" to viewModel.isPetFriendly,
+                    "papelesEnRegla" to viewModel.hasPapers,
+                    "fotoPiscina" to poolUrl, "fotoCochera" to garageUrl, "fotoJardin" to gardenUrl,
+                    "lat" to viewModel.lat, "lng" to viewModel.lng,
                     "imagenes" to uploadedCarouselUrls,
-                    "imagen" to uploadedCarouselUrls.firstOrNull()
+                    "imagen" to (uploadedCarouselUrls.firstOrNull() ?: "")
                 )
 
                 FirebaseFirestore.getInstance().collection("propiedades").document(propId).set(map).await()
-
-                Toast.makeText(context, "¡Publicado con éxito!", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "¡Publicado Exitosamente!", Toast.LENGTH_LONG).show()
                 navController.popBackStack()
-
-            } catch (e: Exception) {
-                isLoading = false
-                Toast.makeText(context, "Error al publicar: ${e.message}", Toast.LENGTH_LONG).show()
-            }
+            } catch (e: Exception) { isLoading = false; Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show() }
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Azul).padding(24.dp).verticalScroll(rememberScrollState())) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // BOTÓN ATRÁS PROTEGIDO
-            IconButton(onClick = { showExitDialog = true }) {
-                Icon(Icons.Default.ArrowBack, null, tint = Color.White)
-            }
-            Text("Publicar $tipoOperacion", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("1. Fotos Principales (Máx 5)", color = Crema, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                Box(modifier = Modifier.size(100.dp).background(Color.White, RoundedCornerShape(12.dp)).border(2.dp, Crema, RoundedCornerShape(12.dp)).clickable { carouselPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, contentAlignment = Alignment.Center) { Icon(Icons.Default.AddPhotoAlternate, null, tint = Azul, modifier = Modifier.size(40.dp)) }
-            }
-            items(selectedImages) { uri -> AsyncImage(model = uri, contentDescription = null, modifier = Modifier.size(100.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop) }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("2. Datos Principales", color = Crema, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        ExposedDropdownMenuBox(
-            expanded = expandedCategory,
-            onExpandedChange = { expandedCategory = !expandedCategory },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            TextField(
-                value = selectedCategory,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Tipo de Inmueble") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCategory) },
-                colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White, focusedTextColor = black, unfocusedTextColor = black),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.menuAnchor().fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expandedCategory,
-                onDismissRequest = { expandedCategory = false },
-                modifier = Modifier.background(Color.White)
-            ) {
-                categories.forEach { category ->
-                    DropdownMenuItem(
-                        text = { Text(category, color = black) },
-                        onClick = {
-                            selectedCategory = category
-                            expandedCategory = false
+    // --- UI ---
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            Column {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text("Paso ${viewModel.currentStep} de $totalSteps", fontSize = 12.sp, color = Azul)
+                            Text(
+                                text = when(viewModel.currentStep){ 1->"Tipo de Inmueble"; 2->"Ubicación"; 3->"Detalles"; else->"Fotos & Publicar" },
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
                         }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { if (viewModel.currentStep > 1) viewModel.currentStep-- else showExitDialog = true }) {
+                            Icon(Icons.Default.ArrowBack, null, tint = MaterialTheme.colorScheme.onBackground)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                )
+                LinearProgressIndicator(
+                    progress = { viewModel.currentStep.toFloat() / totalSteps.toFloat() },
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    color = Azul,
+                    trackColor = Color.DarkGray
+                )
+            }
+        },
+        bottomBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                if (viewModel.currentStep > 1) {
+                    OutlinedButton(
+                        onClick = { viewModel.currentStep-- },
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color.Gray),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                    ) { Text("Atrás") }
+                    Spacer(modifier = Modifier.width(16.dp))
+                }
+
+                val isValid = isStepValid()
+
+                Button(
+                    onClick = {
+                        if (isValid) {
+                            if (viewModel.currentStep < totalSteps) viewModel.currentStep++ else saveProperty()
+                        } else {
+                            Toast.makeText(context, "Completa los datos para continuar", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isValid) Azul else Color.DarkGray,
+                        contentColor = if (isValid) Color.White else Color.Gray
                     )
+                ) {
+                    if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    else Text(if (viewModel.currentStep == totalSteps) "Publicar Ahora" else "Siguiente", fontWeight = FontWeight.Bold)
                 }
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Spacer(modifier = Modifier.height(24.dp))
 
-        CustomInput(value = title, onValueChange = { title = it }, label = "Título (Ej: Casa de Playa)", icon = Icons.Default.Home)
-        Spacer(modifier = Modifier.height(16.dp))
-        Row {
-            Button(onClick = { currency = if (currency == "S/") "$" else "S/" }, colors = ButtonDefaults.buttonColors(containerColor = Crema), shape = RoundedCornerShape(12.dp), modifier = Modifier.height(56.dp).width(60.dp), contentPadding = PaddingValues(0.dp)) { Text(currency, color = black, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
-            Spacer(modifier = Modifier.width(8.dp))
-            Box(modifier = Modifier.weight(1f)) { CustomInput(value = price, onValueChange = { price = it }, label = "Precio", icon = Icons.Default.AttachMoney, isNumber = true) }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        CustomInput(value = area, onValueChange = { area = it }, label = "Área Total (m²)", icon = Icons.Default.SquareFoot, isNumber = true)
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("3. Ubicación", color = Crema, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-        Box { CustomInput(value = address, onValueChange = { onAddressChange(it) }, label = "Dirección...", icon = Icons.Default.LocationOn) }
-        if (searchResults.isNotEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).padding(top = 4.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                LazyColumn {
-                    items(searchResults) { result ->
-                        DropdownMenuItem(
-                            text = { Column { Text(result.featureName ?: result.thoroughfare ?: "", color = black); Text("${result.subLocality ?: ""}, ${result.locality ?: ""}", fontSize = 12.sp, color = Color.Gray) } },
-                            onClick = { address = "${result.featureName ?: result.thoroughfare}, ${result.subLocality ?: ""}"; lat = result.latitude; lng = result.longitude; locationStatus = "¡Ubicación guardada!"; searchResults = emptyList() },
-                            leadingIcon = { Icon(Icons.Default.Place, null, tint = Color.Gray) }
-                        )
+            AnimatedContent(
+                targetState = viewModel.currentStep,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInHorizontally { width -> width } + fadeIn() togetherWith slideOutHorizontally { width -> -width } + fadeOut()
+                    } else {
+                        slideInHorizontally { width -> -width } + fadeIn() togetherWith slideOutHorizontally { width -> width } + fadeOut()
+                    }
+                },
+                label = "WizardAnimation"
+            ) { step ->
+                Column {
+                    when (step) {
+                        1 -> StepOneCategory(viewModel)
+                        2 -> StepTwoLocation(viewModel, navController)
+                        3 -> StepThreeDetails(viewModel)
+                        4 -> StepFourPhotos(viewModel)
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(100.dp))
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = { navController.navigate("pick_location") }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = if (lat != 0.0) Color(0xFF4CAF50) else Azul), border = androidx.compose.foundation.BorderStroke(1.dp, Crema)) { Icon(Icons.Default.Map, null, tint = Color.White); Spacer(modifier = Modifier.width(8.dp)); Text(text = if (lat != 0.0) locationStatus else "O buscar en el Mapa", color = Color.White, fontWeight = FontWeight.Bold) }
-
-        if (!isTerreno) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("4. Características", color = Crema, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                CounterControl(label = "Habitaciones", count = bedrooms, onIncrease = { bedrooms++ }, onDecrease = { if (bedrooms > 1) bedrooms-- })
-                CounterControl(label = "Baños", count = bathrooms, onIncrease = { bathrooms++ }, onDecrease = { if (bathrooms > 1) bathrooms-- })
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (!isOficina) {
-                FeatureWithPhotoControl(label = "Piscina", checked = hasPool, onCheckedChange = { hasPool = it }, imageUri = poolUri, onPickImage = { poolPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
-            }
-            FeatureWithPhotoControl(label = "Cochera", checked = hasGarage, onCheckedChange = { hasGarage = it }, imageUri = garageUri, onPickImage = { garagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
-            FeatureWithPhotoControl(label = "Jardín", checked = hasGarden, onCheckedChange = { hasGarden = it }, imageUri = gardenUri, onPickImage = { gardenPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = isPetFriendly, onCheckedChange = { isPetFriendly = it }, colors = CheckboxDefaults.colors(checkedColor = Crema, uncheckedColor = Color.White, checkmarkColor = black))
-                Text("Pet Friendly", color = Color.White)
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        } else {
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
-        CustomInput(value = description, onValueChange = { description = it }, label = "Descripción", icon = Icons.Default.Description, isMultiLine = true)
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = hasPapers, onCheckedChange = { hasPapers = it }, colors = CheckboxDefaults.colors(checkedColor = Crema, uncheckedColor = Color.White, checkmarkColor = black)); Text("Documentos en regla.", color = Color.White, fontSize = 12.sp) }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        if (isLoading) {
-            CircularProgressIndicator(color = Crema, modifier = Modifier.align(Alignment.CenterHorizontally))
-        } else {
-            Button(
-                onClick = { saveProperty() },
-                modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(25.dp), colors = ButtonDefaults.buttonColors(containerColor = Crema)
-            ) { Text("PUBLICAR PROPIEDAD", color = black, fontWeight = FontWeight.Bold) }
-        }
-        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
-@Composable
-fun FeatureWithPhotoControl(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, imageUri: Uri?, onPickImage: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = checked, onCheckedChange = onCheckedChange, colors = CheckboxDefaults.colors(checkedColor = Crema, uncheckedColor = Color.White, checkmarkColor = black))
-            Text(text = label, color = Color.White, fontSize = 14.sp)
-            if (checked) {
+// --- PASOS DEL WIZARD (Componentes Auxiliares) ---
+@Composable fun StepOneCategory(viewModel: PublishPropertyViewModel) {
+    Text("¿Qué tipo de propiedad es?", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+    Spacer(modifier = Modifier.height(24.dp))
+    listOf("Casa", "Departamento", "Oficina", "Terreno").forEach { category ->
+        val isSelected = viewModel.selectedCategory == category
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { viewModel.onCategoryChange(category) }, colors = CardDefaults.cardColors(containerColor = if (isSelected) Azul.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surface), border = if (isSelected) BorderStroke(2.dp, Azul) else null, shape = RoundedCornerShape(16.dp)) {
+            Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = when(category){"Casa"->Icons.Default.Home; "Departamento"->Icons.Default.Apartment; "Oficina"->Icons.Default.Business; else->Icons.Default.Landscape}, contentDescription = null, tint = if(isSelected) Azul else Color.Gray, modifier = Modifier.size(32.dp))
                 Spacer(modifier = Modifier.width(16.dp))
-                Button(onClick = onPickImage, colors = ButtonDefaults.buttonColors(containerColor = if (imageUri != null) Color(0xFF4CAF50) else Color.White), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp), modifier = Modifier.height(30.dp)) {
-                    Icon(Icons.Default.CameraAlt, null, tint = if (imageUri != null) Color.White else Azul, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (imageUri != null) "Foto Lista" else "Añadir Foto", fontSize = 10.sp, color = if (imageUri != null) Color.White else Azul)
-                }
+                Text(category, fontSize = 18.sp, fontWeight = if(isSelected) FontWeight.Bold else FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(modifier = Modifier.weight(1f))
+                if(isSelected) Icon(Icons.Default.CheckCircle, null, tint = Azul)
             }
         }
-        if (checked && imageUri != null) {
-            AsyncImage(model = imageUri, contentDescription = null, modifier = Modifier.padding(start = 48.dp, bottom = 8.dp).size(60.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
-        }
     }
 }
 
-@Composable
-fun CustomInput(value: String, onValueChange: (String) -> Unit, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isNumber: Boolean = false, isMultiLine: Boolean = false) {
-    TextField(value = value, onValueChange = onValueChange, label = { Text(label) }, leadingIcon = { Icon(icon, null, tint = Azul) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), keyboardOptions = if (isNumber) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default, minLines = if (isMultiLine) 3 else 1, maxLines = if (isMultiLine) 5 else 1, colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White, focusedTextColor = black, unfocusedTextColor = black, focusedLabelColor = Azul, unfocusedLabelColor = Color.Gray, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
-}
-
-@Composable
-fun CounterControl(label: String, count: Int, onIncrease: () -> Unit, onDecrease: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = Color.White, fontSize = 12.sp)
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(modifier = Modifier.background(Color.White, RoundedCornerShape(8.dp)).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onDecrease, modifier = Modifier.size(30.dp)) { Text("-", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = black) }
-            Text("$count", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = black, modifier = Modifier.padding(horizontal = 8.dp))
-            IconButton(onClick = onIncrease, modifier = Modifier.size(30.dp)) { Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = black) }
+@Composable fun StepTwoLocation(viewModel: PublishPropertyViewModel, navController: NavController) {
+    Text("¿Dónde se ubica?", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+    Spacer(modifier = Modifier.height(24.dp))
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.LocationOn, null, tint = Azul); Spacer(modifier = Modifier.width(8.dp)); Text("Dirección Referencial", color = Azul, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = if(viewModel.address.isEmpty()) "Selecciona en el mapa..." else viewModel.address, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
         }
     }
+    Spacer(modifier = Modifier.height(24.dp))
+    Button(onClick = { navController.navigate("pick_location") }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, Azul)) { Icon(Icons.Default.Map, null, tint = Azul); Spacer(modifier = Modifier.width(12.dp)); Text(if(viewModel.lat != 0.0) "Cambiar Ubicación" else "Abrir Mapa", color = Azul, fontWeight = FontWeight.Bold) }
+    if (viewModel.lat != 0.0) { Spacer(modifier = Modifier.height(16.dp)); Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp)); Spacer(modifier = Modifier.width(8.dp)); Text("Ubicación confirmada", color = Color(0xFF4CAF50), fontSize = 14.sp) } }
 }
+
+@Composable fun StepThreeDetails(viewModel: PublishPropertyViewModel) {
+    Text("Cuéntanos más", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+    Spacer(modifier = Modifier.height(24.dp))
+    CustomInput(value = viewModel.title, onValueChange = { viewModel.title = it }, label = "Título del Anuncio", icon = Icons.Default.Title)
+    Spacer(modifier = Modifier.height(16.dp))
+    Row { Surface(onClick = { viewModel.currency = if (viewModel.currency == "S/") "$" else "S/" }, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, Color.Gray), modifier = Modifier.height(56.dp).width(70.dp)) { Box(contentAlignment = Alignment.Center) { Text(viewModel.currency, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp) } }; Spacer(modifier = Modifier.width(8.dp)); Box(modifier = Modifier.weight(1f)) { CustomInput(value = viewModel.price, onValueChange = { viewModel.price = it }, label = "Precio", icon = Icons.Default.AttachMoney, isNumber = true) } }
+    Spacer(modifier = Modifier.height(16.dp))
+    CustomInput(value = viewModel.area, onValueChange = { viewModel.area = it }, label = "Área (m²)", icon = Icons.Default.SquareFoot, isNumber = true)
+    if (viewModel.selectedCategory != "Terreno") {
+        Spacer(modifier = Modifier.height(24.dp)); Text("Distribución", color = Azul, fontWeight = FontWeight.Bold); Spacer(modifier = Modifier.height(16.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { CounterControl("Habitaciones", viewModel.bedrooms, { viewModel.bedrooms++ }, { if (viewModel.bedrooms > 1) viewModel.bedrooms-- }); CounterControl("Baños", viewModel.bathrooms, { viewModel.bathrooms++ }, { if (viewModel.bathrooms > 1) viewModel.bathrooms-- }) }
+    }
+    Spacer(modifier = Modifier.height(24.dp)); CustomInput(value = viewModel.description, onValueChange = { viewModel.description = it }, label = "Descripción", icon = Icons.Default.Description, isMultiLine = true)
+}
+
+@Composable fun StepFourPhotos(viewModel: PublishPropertyViewModel) {
+    val carouselPicker = rememberLauncherForActivityResult(contract = ActivityResultContracts.PickMultipleVisualMedia(5)) { if(it.isNotEmpty()) viewModel.selectedImages = it }
+    Text("Galería Visual", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground); Text("Añade fotos de alta calidad.", color = Color.Gray, fontSize = 14.sp)
+    Spacer(modifier = Modifier.height(24.dp))
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
+        item { Card(modifier = Modifier.size(140.dp).clickable { carouselPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, Azul.copy(alpha = 0.5f)), shape = RoundedCornerShape(16.dp)) { Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Icon(Icons.Rounded.AddPhotoAlternate, null, tint = Azul, modifier = Modifier.size(40.dp)); Spacer(modifier = Modifier.height(8.dp)); Text("Añadir Fotos", color = Azul, fontWeight = FontWeight.Medium) } } }
+        items(viewModel.selectedImages) { uri -> Card(modifier = Modifier.size(140.dp), shape = RoundedCornerShape(16.dp)) { Box(modifier = Modifier.fillMaxSize()) { AsyncImage(model = uri, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop); IconButton(onClick = { viewModel.selectedImages = viewModel.selectedImages.filter { it != uri } }, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(28.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)) { Icon(Icons.Rounded.Close, contentDescription = "Eliminar", tint = Color.White, modifier = Modifier.size(16.dp)) } } } }
+    }
+    Spacer(modifier = Modifier.height(32.dp))
+    Text("Adicionales", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground); Spacer(modifier = Modifier.height(12.dp))
+    Column { FeatureCheckItem("Piscina", viewModel.hasPool) { viewModel.hasPool = it }; FeatureCheckItem("Cochera", viewModel.hasGarage) { viewModel.hasGarage = it }; FeatureCheckItem("Jardín", viewModel.hasGarden) { viewModel.hasGarden = it }; FeatureCheckItem("Pet Friendly 🐾", viewModel.isPetFriendly) { viewModel.isPetFriendly = it }; FeatureCheckItem("Papeles en Regla 📄", viewModel.hasPapers) { viewModel.hasPapers = it } }
+}
+
+@Composable fun CustomInput(value: String, onValueChange: (String) -> Unit, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isNumber: Boolean = false, isMultiLine: Boolean = false) { OutlinedTextField(value = value, onValueChange = onValueChange, label = { Text(label) }, leadingIcon = { Icon(icon, null, tint = Azul) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), keyboardOptions = if (isNumber) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default, minLines = if (isMultiLine) 3 else 1, maxLines = if (isMultiLine) 5 else 1, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Azul, unfocusedBorderColor = Color.Gray, focusedLabelColor = Azul, unfocusedLabelColor = Color.Gray, focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface, focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface)) }
+@Composable fun CounterControl(label: String, count: Int, onIncrease: () -> Unit, onDecrease: () -> Unit) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(label, color = Color.Gray, fontSize = 12.sp); Spacer(modifier = Modifier.height(8.dp)); Row(modifier = Modifier.background(MaterialTheme.colorScheme.surface, RoundedCornerShape(50)).border(1.dp, Color.Gray, RoundedCornerShape(50)).padding(4.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onDecrease, modifier = Modifier.size(36.dp)) { Text("-", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) }; Text("$count", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 12.dp)); IconButton(onClick = onIncrease, modifier = Modifier.size(36.dp)) { Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Azul) } } } }
+@Composable fun FeatureCheckItem(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) { Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (checked) Azul.copy(alpha = 0.15f) else Color.Transparent).clickable { onCheckedChange(!checked) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(imageVector = if(checked) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = if(checked) Azul else Color.Gray); Spacer(modifier = Modifier.width(12.dp)); Text(label, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface, fontWeight = if(checked) FontWeight.Bold else FontWeight.Normal) } }

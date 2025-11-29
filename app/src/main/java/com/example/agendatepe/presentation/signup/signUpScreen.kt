@@ -4,17 +4,21 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.agendatepe.R
 import com.example.agendatepe.ui.theme.*
 
 @Composable
@@ -25,71 +29,96 @@ fun SingUpScreen(
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordConfirm by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(color = Azul)
-            .padding(horizontal = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(DarkBackground) // Fondo negro
+            .padding(24.dp)
     ) {
-        Spacer(modifier = Modifier.height(30.dp))
-        Row {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.padding(vertical = 24.dp).size(24.dp)
-            ) {
-                Icon(
-                    painterResource(id = R.drawable.back),
-                    contentDescription = "Atrás",
-                    tint = Color.White
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f))
+        IconButton(onClick = onBack, modifier = Modifier.offset(x = (-12).dp)) {
+            Icon(Icons.Default.ArrowBack, contentDescription = "Atrás", tint = MainWhite)
         }
 
-        Text(text = "Email", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 40.sp)
-        TextField(
-            value = email,
-            onValueChange = { email = it },
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text("Crear Cuenta", color = MainWhite, fontWeight = FontWeight.Bold, fontSize = 32.sp)
+        Text("Únete a la mejor comunidad inmobiliaria.", color = TextGray, fontSize = 16.sp, modifier = Modifier.padding(top = 8.dp))
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        // Email
+        OutlinedTextField(
+            value = email, onValueChange = { email = it },
+            label = { Text("Correo Electrónico") },
             modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.colors(
-                unfocusedContainerColor = UnselectedField,
-                focusedContainerColor = SelectedField
-            )
+            shape = RoundedCornerShape(12.dp),
+            leadingIcon = { Icon(Icons.Default.Email, null, tint = TextGray) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MainBlue, unfocusedBorderColor = Color.DarkGray,
+                focusedLabelColor = MainBlue, unfocusedLabelColor = TextGray,
+                focusedTextColor = MainWhite, unfocusedTextColor = MainWhite, cursorColor = MainBlue
+            ),
+            singleLine = true
         )
 
-        Spacer(Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        Text(text = "Password", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 40.sp)
-        TextField(
-            value = password,
-            onValueChange = { password = it },
+        // Contraseña
+        OutlinedTextField(
+            value = password, onValueChange = { password = it },
+            label = { Text("Contraseña") },
             modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.colors(
-                unfocusedContainerColor = UnselectedField,
-                focusedContainerColor = SelectedField
-            )
+            shape = RoundedCornerShape(12.dp),
+            leadingIcon = { Icon(Icons.Default.Lock, null, tint = TextGray) },
+            trailingIcon = { IconButton(onClick = { passwordVisible = !passwordVisible }) { Icon(if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, tint = TextGray) } },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MainBlue, unfocusedBorderColor = Color.DarkGray,
+                focusedLabelColor = MainBlue, unfocusedLabelColor = TextGray,
+                focusedTextColor = MainWhite, unfocusedTextColor = MainWhite, cursorColor = MainBlue
+            ),
+            singleLine = true
         )
 
-        Spacer(Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Confirmar Contraseña
+        OutlinedTextField(
+            value = passwordConfirm, onValueChange = { passwordConfirm = it },
+            label = { Text("Confirmar Contraseña") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            leadingIcon = { Icon(Icons.Default.Lock, null, tint = TextGray) },
+            visualTransformation = PasswordVisualTransformation(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = if(password == passwordConfirm) MainBlue else Color.Red,
+                unfocusedBorderColor = Color.DarkGray,
+                focusedLabelColor = MainBlue, unfocusedLabelColor = TextGray,
+                focusedTextColor = MainWhite, unfocusedTextColor = MainWhite, cursorColor = MainBlue
+            ),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
 
         Button(
             onClick = {
                 if (email.isNotEmpty() && password.isNotEmpty()) {
-                    if (password.length >= 6) {
-                        navigateToProfile(email, password)
-                    } else {
-                        Toast.makeText(context, "La contraseña debe tener al menos 6 caracteres", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Toast.makeText(context, "Completa todos los datos", Toast.LENGTH_SHORT).show()
-                }
+                    if (password == passwordConfirm) {
+                        if (password.length >= 6) navigateToProfile(email, password)
+                        else Toast.makeText(context, "Mínimo 6 caracteres", Toast.LENGTH_SHORT).show()
+                    } else { Toast.makeText(context, "Las contraseñas no coinciden", Toast.LENGTH_SHORT).show() }
+                } else { Toast.makeText(context, "Completa todos los datos", Toast.LENGTH_SHORT).show() }
             },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Crema)
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MainBlue)
         ) {
-            Text(text = "Continuar", color = black, fontWeight = FontWeight.Bold)
+            Text("Continuar", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }

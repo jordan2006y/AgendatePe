@@ -1,22 +1,30 @@
 package com.example.agendatepe.presentation.login
 
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.agendatepe.R
 import com.example.agendatepe.ui.theme.*
 import com.google.firebase.auth.FirebaseAuth
 
@@ -29,85 +37,127 @@ fun LoginScreen(
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
-    // --- PROTECCIÓN DE SALIDA ---
+    // Dialogo Salida
     var showExitDialog by remember { mutableStateOf(false) }
     BackHandler { showExitDialog = true }
-
     if (showExitDialog) {
         AlertDialog(
             onDismissRequest = { showExitDialog = false },
-            title = { Text("¿Cancelar inicio de sesión?") },
-            text = { Text("Se perderán los datos ingresados.") },
+            title = { Text("¿Cancelar?", color = MainWhite) },
+            text = { Text("Se perderán los datos ingresados.", color = TextGray) },
             confirmButton = { Button(onClick = { showExitDialog = false; onBack() }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Salir", color = Color.White) } },
-            dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Continuar", color = black) } },
-            containerColor = Color.White
+            dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Continuar", color = MainWhite) } },
+            containerColor = DarkSurface
         )
     }
-    // ----------------------------
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(color = Azul)
-            .padding(horizontal = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(DarkBackground) // Fondo negro estilo Instagram
+            .padding(24.dp)
     ) {
-        Spacer(modifier = Modifier.height(30.dp))
-        Row {
-            IconButton(
-                onClick = { showExitDialog = true }, // Activamos dialogo aquí
-                modifier = Modifier.padding(vertical = 24.dp).size(24.dp)
-            ) {
-                Icon(
-                    painterResource(id = R.drawable.back),
-                    contentDescription = "",
-                    tint = White
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f))
+        // Header
+        IconButton(onClick = { showExitDialog = true }, modifier = Modifier.offset(x = (-12).dp)) {
+            Icon(Icons.Default.ArrowBack, contentDescription = "Atrás", tint = MainWhite)
         }
 
-        Text(text = "Email", color = White, fontWeight = FontWeight.Bold, fontSize = 40.sp)
-        TextField(
-            value = email,
-            onValueChange = { email = it },
-            modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.colors(
-                unfocusedContainerColor = UnselectedField, focusedContainerColor = SelectedField
-            )
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Bienvenido de nuevo",
+            color = MainWhite,
+            fontWeight = FontWeight.Bold,
+            fontSize = 32.sp
         )
-        Spacer(Modifier.height(48.dp))
-        Text(text = "Password", color = White, fontWeight = FontWeight.Bold, fontSize = 40.sp)
-        TextField(
-            value = password,
-            onValueChange = { password = it },
-            modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.colors(
-                unfocusedContainerColor = UnselectedField, focusedContainerColor = SelectedField
-            )
+        Text(
+            text = "Ingresa tus credenciales para continuar.",
+            color = TextGray,
+            fontSize = 16.sp,
+            modifier = Modifier.padding(top = 8.dp)
         )
-        Spacer(Modifier.height(48.dp))
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        // Inputs Sofisticados
+        OutlinedTextField(
+            value = email, onValueChange = { email = it },
+            label = { Text("Correo Electrónico") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            leadingIcon = { Icon(Icons.Default.Email, null, tint = TextGray) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MainBlue,
+                unfocusedBorderColor = Color.DarkGray,
+                focusedLabelColor = MainBlue,
+                unfocusedLabelColor = TextGray,
+                focusedTextColor = MainWhite,
+                unfocusedTextColor = MainWhite,
+                cursorColor = MainBlue
+            ),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        OutlinedTextField(
+            value = password, onValueChange = { password = it },
+            label = { Text("Contraseña") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            leadingIcon = { Icon(Icons.Default.Lock, null, tint = TextGray) },
+            trailingIcon = {
+                val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(image, null, tint = TextGray)
+                }
+            },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MainBlue,
+                unfocusedBorderColor = Color.DarkGray,
+                focusedLabelColor = MainBlue,
+                unfocusedLabelColor = TextGray,
+                focusedTextColor = MainWhite,
+                unfocusedTextColor = MainWhite,
+                cursorColor = MainBlue
+            ),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "¿Olvidaste tu contraseña?",
+            color = MainBlue,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            modifier = Modifier.align(Alignment.End).clickable { /* TODO: Implementar Reset Password */ }
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
 
         Button(
             onClick = {
                 if (email.isNotEmpty() && password.isNotEmpty()) {
+                    isLoading = true
                     auth.signInWithEmailAndPassword(email, password).addOnCompleteListener { task ->
-                        if (task.isSuccessful) {
-                            Log.i("aris", "Login Ok")
-                            navigateToHome()
-                        } else {
-                            Log.i("aris", "Login Fail")
-                            Toast.makeText(context, "Error: Cuenta no existe o datos incorrectos", Toast.LENGTH_SHORT).show()
-                        }
+                        isLoading = false
+                        if (task.isSuccessful) navigateToHome()
+                        else Toast.makeText(context, "Error: Verifica tus datos", Toast.LENGTH_SHORT).show()
                     }
-                } else {
-                    Toast.makeText(context, "Llene todos los campos", Toast.LENGTH_SHORT).show()
-                }
+                } else { Toast.makeText(context, "Completa todos los campos", Toast.LENGTH_SHORT).show() }
             },
-            colors = ButtonDefaults.buttonColors(containerColor = Crema)
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MainBlue)
         ) {
-            Text(text = "Login", color = black)
+            if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+            else Text("Ingresar", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }

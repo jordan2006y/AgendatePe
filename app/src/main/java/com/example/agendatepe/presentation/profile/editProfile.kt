@@ -4,8 +4,8 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +22,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +33,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.agendatepe.presentation.home.glassEffect
 import com.example.agendatepe.ui.theme.*
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
@@ -39,6 +42,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.storage.FirebaseStorage
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
     auth: FirebaseAuth,
@@ -53,33 +57,29 @@ fun EditProfileScreen(
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var showChangeEmailDialog by remember { mutableStateOf(false) }
-
-    // --- PROTECCIÓN DE SALIDA ---
     var showExitDialog by remember { mutableStateOf(false) }
-    BackHandler { showExitDialog = true }
 
+    // --- PROTECCIÓN SALIDA ---
+    BackHandler { showExitDialog = true }
     if (showExitDialog) {
         AlertDialog(
             onDismissRequest = { showExitDialog = false },
-            title = { Text("¿Salir sin guardar?") },
-            text = { Text("Si sales ahora, perderás los cambios en tu perfil.") },
+            title = { Text("¿Salir sin guardar?", color = MaterialTheme.colorScheme.onSurface) },
+            text = { Text("Se perderán los cambios.", color = Color.Gray) },
             confirmButton = { Button(onClick = { showExitDialog = false; navigateToHome() }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Salir", color = Color.White) } },
-            dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Cancelar", color = black) } },
-            containerColor = Color.White
+            dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Cancelar", color = MaterialTheme.colorScheme.onSurface) } },
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
-    // ----------------------------
 
     var isGoogleUser by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val user = auth.currentUser
         val uid = user?.uid
-
         if (uid != null) {
             email = user.email ?: ""
             isGoogleUser = user.providerData.any { it.providerId == GoogleAuthProvider.PROVIDER_ID }
-
             FirebaseFirestore.getInstance().collection("users").document(uid).get()
                 .addOnSuccessListener { doc ->
                     if (doc.exists()) {
@@ -92,150 +92,196 @@ fun EditProfileScreen(
                     }
                     isLoading = false
                 }
-                .addOnFailureListener {
-                    name = user.displayName ?: ""
-                    isLoading = false
-                }
+                .addOnFailureListener { name = user.displayName ?: ""; isLoading = false }
         }
     }
 
-    val pickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? -> imageUri = uri }
+    val pickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.PickVisualMedia()) { imageUri = it }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Azul)
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            IconButton(onClick = { showExitDialog = true }) { Icon(Icons.Default.ArrowBack, null, tint = Color.White) }
-            Spacer(modifier = Modifier.weight(1f))
-            Text("Mi Perfil", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = { auth.signOut(); navigateToLogin() }) { Icon(Icons.Default.Logout, null, tint = Color.Red) }
+    // --- UI PREMIUM ---
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background, // Negro
+        topBar = {
+            TopAppBar(
+                title = { Text("Editar Perfil", fontWeight = FontWeight.Bold) },
+                navigationIcon = { IconButton(onClick = { showExitDialog = true }) { Icon(Icons.Default.ArrowBack, null, tint = MaterialTheme.colorScheme.onBackground) } },
+                actions = { IconButton(onClick = { auth.signOut(); navigateToLogin() }) { Icon(Icons.Default.Logout, null, tint = Color.Red) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background, titleContentColor = MaterialTheme.colorScheme.onBackground)
+            )
         }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(24.dp))
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        if (isLoading) {
-            CircularProgressIndicator(color = Crema)
-        } else {
+            // FOTO DE PERFIL (HERO)
             Box(
-                modifier = Modifier.size(120.dp).clip(CircleShape).background(Color.White).border(2.dp, Crema, CircleShape)
+                modifier = Modifier
+                    .size(140.dp)
                     .clickable { pickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.BottomEnd
             ) {
-                if (imageUri != null) AsyncImage(model = imageUri, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                else if (imageUrl.isNotEmpty()) AsyncImage(model = imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                else Icon(Icons.Default.Person, null, tint = Azul, modifier = Modifier.size(60.dp))
+                // Imagen
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .border(2.dp, Azul, CircleShape)
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (imageUri != null) AsyncImage(model = imageUri, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    else if (imageUrl.isNotEmpty()) AsyncImage(model = imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    else Icon(Icons.Default.Person, null, tint = Color.Gray, modifier = Modifier.size(64.dp))
+                }
+
+                // Icono Cámara (Glass Effect)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .glassEffect(backgroundColor = Azul, shape = CircleShape)
+                        .border(2.dp, MaterialTheme.colorScheme.background, CircleShape), // Borde negro para separar
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CameraAlt, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Toca para cambiar foto", color = Crema, fontSize = 12.sp)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Cambiar Foto", color = Azul, fontSize = 14.sp, fontWeight = FontWeight.Bold)
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            Text("Nombre Completo", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
+            // FORMULARIO
+            Text("Información Personal", color = Color.Gray, fontSize = 14.sp, modifier = Modifier.align(Alignment.Start))
             Spacer(modifier = Modifier.height(8.dp))
-            TextField(
+
+            OutlinedTextField(
                 value = name, onValueChange = { name = it },
+                label = { Text("Nombre Completo") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White, focusedTextColor = black, unfocusedTextColor = black)
+                leadingIcon = { Icon(Icons.Default.Person, null, tint = Azul) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Azul, unfocusedBorderColor = Color.DarkGray,
+                    focusedLabelColor = Azul, unfocusedLabelColor = Color.Gray,
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                ),
+                singleLine = true
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text("Teléfono (9 dígitos)", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
-            Spacer(modifier = Modifier.height(8.dp))
-
-            TextField(
-                value = phone,
-                onValueChange = { input ->
-                    if (input.all { it.isDigit() } && input.length <= 9) {
-                        phone = input
-                    }
-                },
+            OutlinedTextField(
+                value = phone, onValueChange = { if (it.all { c -> c.isDigit() } && it.length <= 9) phone = it },
+                label = { Text("Teléfono") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
+                leadingIcon = { Icon(Icons.Default.Phone, null, tint = Azul) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.White, unfocusedContainerColor = Color.White,
-                    focusedTextColor = black, unfocusedTextColor = black
-                )
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Azul, unfocusedBorderColor = Color.DarkGray,
+                    focusedLabelColor = Azul, unfocusedLabelColor = Color.Gray,
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                ),
+                singleLine = true
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            // SECCIÓN SEGURIDAD
             if (!isGoogleUser) {
-                Divider(color = Color.Gray, thickness = 0.5.dp)
+                HorizontalDivider(color = Color.DarkGray)
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Seguridad", color = Color.Gray, fontSize = 14.sp, modifier = Modifier.align(Alignment.Start))
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Seguridad", color = Crema, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedButton(onClick = { showChangeEmailDialog = true }, modifier = Modifier.fillMaxWidth(), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) { Icon(Icons.Default.Email, null, tint = Color.White); Spacer(modifier = Modifier.width(8.dp)); Text(email.ifEmpty { "Correo" }, color = Color.White); Spacer(modifier = Modifier.weight(1f)); Icon(Icons.Default.Edit, null, tint = Crema) }
+
+                // Botón Cambiar Correo
+                OutlinedButton(
+                    onClick = { showChangeEmailDialog = true },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.Gray),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
+                ) {
+                    Icon(Icons.Default.Email, null, tint = Color.Gray)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(email.ifEmpty { "Correo" }, modifier = Modifier.weight(1f))
+                    Icon(Icons.Default.Edit, null, tint = Azul)
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(onClick = { if(email.isNotEmpty()) auth.sendPasswordResetEmail(email).addOnSuccessListener { Toast.makeText(context, "Correo enviado", Toast.LENGTH_LONG).show() } }, modifier = Modifier.fillMaxWidth(), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)) { Icon(Icons.Default.Lock, null, tint = Color.White); Spacer(modifier = Modifier.width(8.dp)); Text("Cambiar Contraseña", color = Color.White); Spacer(modifier = Modifier.weight(1f)); Icon(Icons.Default.ArrowForward, null, tint = Crema) }
+
+                // Botón Cambiar Contraseña
+                OutlinedButton(
+                    onClick = { if(email.isNotEmpty()) auth.sendPasswordResetEmail(email).addOnSuccessListener { Toast.makeText(context, "Correo enviado", Toast.LENGTH_LONG).show() } },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.Gray),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
+                ) {
+                    Icon(Icons.Default.Lock, null, tint = Color.Gray)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Restablecer Contraseña", modifier = Modifier.weight(1f))
+                    Icon(Icons.Default.ArrowForward, null, tint = Azul)
+                }
             }
 
             Spacer(modifier = Modifier.height(40.dp))
 
+            // BOTÓN GUARDAR (Con Sombra Azul)
             Button(
                 onClick = {
-                    if (name.isEmpty()) {
-                        Toast.makeText(context, "Ingresa tu nombre", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    if (phone.length != 9) {
-                        Toast.makeText(context, "El teléfono debe tener 9 dígitos", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-
-                    isLoading = true
-                    val uid = auth.currentUser?.uid ?: return@Button
-
-                    fun updateData(url: String) {
-                        val map = hashMapOf("id" to uid, "email" to email, "name" to name, "phone" to phone, "image" to url)
-                        FirebaseFirestore.getInstance().collection("users").document(uid).set(map, SetOptions.merge())
-                            .addOnSuccessListener {
-                                isLoading = false
-                                Toast.makeText(context, "Perfil Guardado", Toast.LENGTH_SHORT).show()
-                                navigateToHome()
-                            }
-                    }
-
-                    if (imageUri != null) {
-                        val ref = FirebaseStorage.getInstance().reference.child("profile_images/$uid.jpg")
-                        ref.putFile(imageUri!!).addOnSuccessListener { ref.downloadUrl.addOnSuccessListener { url -> updateData(url.toString()) } }
+                    if (name.isEmpty() || phone.length != 9) {
+                        Toast.makeText(context, "Verifica tu nombre y teléfono (9 dígitos)", Toast.LENGTH_SHORT).show()
                     } else {
-                        updateData(imageUrl)
+                        isLoading = true
+                        val uid = auth.currentUser?.uid ?: return@Button
+                        fun uploadData(url: String) {
+                            val map = hashMapOf("id" to uid, "email" to email, "name" to name, "phone" to phone, "image" to url)
+                            FirebaseFirestore.getInstance().collection("users").document(uid).set(map, SetOptions.merge())
+                                .addOnSuccessListener { isLoading = false; navigateToHome() }
+                        }
+                        if (imageUri != null) {
+                            val ref = FirebaseStorage.getInstance().reference.child("profile_images/$uid.jpg")
+                            ref.putFile(imageUri!!).addOnSuccessListener { ref.downloadUrl.addOnSuccessListener { uploadData(it.toString()) } }
+                        } else uploadData(imageUrl)
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(25.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Crema)
+                modifier = Modifier.fillMaxWidth().height(56.dp).shadow(8.dp, RoundedCornerShape(12.dp), spotColor = Azul),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Azul)
             ) {
-                Text("Guardar y Continuar", color = black, fontWeight = FontWeight.Bold)
+                if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                else Text("GUARDAR CAMBIOS", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
+
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 
     if (showChangeEmailDialog) {
         AlertDialog(
             onDismissRequest = { showChangeEmailDialog = false },
-            containerColor = Color.White,
-            title = { Text("Cambiar Correo", color = black, fontWeight = FontWeight.Bold) },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("Cambiar Correo", color = MaterialTheme.colorScheme.onSurface) },
             text = {
                 var passwordVerify by remember { mutableStateOf("") }
                 var newEmail by remember { mutableStateOf("") }
                 Column {
-                    Text("Ingresa tu contraseña actual y el nuevo correo.", fontSize = 14.sp, color = Color.Gray)
+                    Text("Confirma tu identidad para continuar.", fontSize = 14.sp, color = Color.Gray)
                     Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedTextField(value = passwordVerify, onValueChange = { passwordVerify = it }, label = { Text("Contraseña") }, visualTransformation = PasswordVisualTransformation(), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = black, unfocusedTextColor = black))
+                    OutlinedTextField(value = passwordVerify, onValueChange = { passwordVerify = it }, label = { Text("Contraseña Actual") }, visualTransformation = PasswordVisualTransformation(), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface))
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(value = newEmail, onValueChange = { newEmail = it }, label = { Text("Nuevo Correo") }, colors = OutlinedTextFieldDefaults.colors(focusedTextColor = black, unfocusedTextColor = black))
+                    OutlinedTextField(value = newEmail, onValueChange = { newEmail = it }, label = { Text("Nuevo Correo") }, colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface))
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
