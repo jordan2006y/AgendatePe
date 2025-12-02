@@ -7,18 +7,24 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -38,7 +44,8 @@ fun ProfileScreen(
     auth: FirebaseAuth,
     emailRecibido: String,
     passwordRecibido: String,
-    navigateToHome: () -> Unit
+    navigateToHome: () -> Unit,
+    onCancel: () -> Unit // Parámetro para cancelar registro
 ) {
     val context = LocalContext.current
     var name by remember { mutableStateOf("") }
@@ -46,29 +53,41 @@ fun ProfileScreen(
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
+    // Validación visual (si hay texto y no cumple los 9 dígitos)
+    val isPhoneError = phone.isNotEmpty() && phone.length < 9
+
     // --- PROTECCIÓN DE SALIDA ---
     var showExitDialog by remember { mutableStateOf(false) }
-    // Como esta es una pantalla "intermedia" de registro, el "atrás" podría ser cancelar registro.
     BackHandler { showExitDialog = true }
 
     if (showExitDialog) {
         AlertDialog(
             onDismissRequest = { showExitDialog = false },
-            title = { Text("¿Cancelar registro?") },
-            text = { Text("Si sales ahora, no se completará tu perfil.") },
-            confirmButton = { Button(onClick = { showExitDialog = false; /* No hay navegación atrás clara aquí, pero podríamos cerrar app o ir a login */ }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Salir", color = Color.White) } },
-            dismissButton = { TextButton(onClick = { showExitDialog = false }) { Text("Continuar Editando", color = black) } },
-            containerColor = Color.White
+            title = { Text("¿Cancelar registro?", color = MainWhite) },
+            text = { Text("Si sales ahora, se cerrará la sesión y no se guardarán tus datos.", color = TextGray) },
+            confirmButton = {
+                Button(
+                    onClick = { showExitDialog = false; onCancel() }, // Llama a la limpieza
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                ) { Text("Salir", color = Color.White) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) {
+                    Text("Continuar", color = MainWhite)
+                }
+            },
+            containerColor = DarkSurface
         )
     }
-    // ----------------------------
 
     val googleUser = auth.currentUser
     val isGoogleLogin = passwordRecibido == "GOOGLE_LOGIN" || (googleUser != null && passwordRecibido.isEmpty())
 
     LaunchedEffect(Unit) {
         if (isGoogleLogin && googleUser != null) {
-            name = googleUser.displayName ?: ""
+            val rawName = googleUser.displayName ?: ""
+            // Limpiamos el nombre de Google por si trae números
+            name = rawName.filter { !it.isDigit() }
         }
     }
 
@@ -79,100 +98,160 @@ fun ProfileScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Azul)
-            .padding(24.dp),
+            .background(DarkBackground)
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "AgendatePé", color = Color.White, fontSize = 14.sp)
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(text = "AgendatePé", color = Azul, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Configuración de Perfil",
-            color = Color.White,
+            text = "Configura tu Perfil",
+            color = MainWhite,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold
         )
-        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "Completa tus datos para finalizar.",
+            color = TextGray,
+            fontSize = 16.sp,
+            modifier = Modifier.padding(top = 8.dp)
+        )
 
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // --- FOTO ---
         Box(
             modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(Crema)
-                .clickable {
-                    pickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                },
-            contentAlignment = Alignment.Center
+                .size(130.dp)
+                .clickable { pickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            contentAlignment = Alignment.BottomEnd
         ) {
-            if (imageUri != null) {
-                AsyncImage(
-                    model = imageUri,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Icon(Icons.Default.CameraAlt, contentDescription = null, tint = black, modifier = Modifier.size(50.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .border(2.dp, Azul, CircleShape)
+                    .background(DarkSurface),
+                contentAlignment = Alignment.Center
+            ) {
+                if (imageUri != null) {
+                    AsyncImage(
+                        model = imageUri,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(Icons.Default.Person, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(60.dp))
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Azul)
+                    .border(2.dp, DarkBackground, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.CameraAlt, null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(text = "Toca para subir foto", color = Color.White, fontSize = 12.sp)
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = "Subir foto", color = Azul, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 
-        Text("Nombre Completo", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
-        Spacer(modifier = Modifier.height(8.dp))
-        TextField(
-            value = name, onValueChange = { name = it },
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // --- INPUT: NOMBRE (Sin Números) ---
+        OutlinedTextField(
+            value = name,
+            onValueChange = { input ->
+                // Valida que NO tenga dígitos
+                if (input.none { it.isDigit() }) {
+                    name = input
+                }
+            },
+            label = { Text("Nombre Completo") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Crema, unfocusedContainerColor = Crema,
-                focusedTextColor = black, unfocusedTextColor = black,
-                focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent
-            )
+            leadingIcon = { Icon(Icons.Default.Person, null, tint = TextGray) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Azul,
+                unfocusedBorderColor = Color.DarkGray,
+                focusedLabelColor = Azul,
+                unfocusedLabelColor = TextGray,
+                focusedTextColor = MainWhite,
+                unfocusedTextColor = MainWhite,
+                cursorColor = Azul,
+                focusedContainerColor = DarkBackground,
+                unfocusedContainerColor = DarkBackground
+            ),
+            singleLine = true
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text("Número de Telefono", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
-        Spacer(modifier = Modifier.height(8.dp))
-
-        TextField(
+        // --- INPUT: TELÉFONO (Empieza con 9, solo 9 dígitos) ---
+        OutlinedTextField(
             value = phone,
             onValueChange = { input ->
                 if (input.all { it.isDigit() } && input.length <= 9) {
-                    phone = input
+                    // Solo permite escribir si empieza con 9 o está vacío
+                    if (input.isEmpty() || input.startsWith("9")) {
+                        phone = input
+                    }
                 }
             },
+            label = { Text("Celular (Empieza con 9)") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
+            leadingIcon = { Icon(Icons.Default.Phone, null, tint = TextGray) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Crema,
-                unfocusedContainerColor = Crema,
-                focusedTextColor = black,
-                unfocusedTextColor = black,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent
-            )
+            isError = isPhoneError,
+            supportingText = {
+                if (isPhoneError) {
+                    Text(text = "Debe tener 9 dígitos", color = Color.Red)
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = if (isPhoneError) Color.Red else Azul,
+                unfocusedBorderColor = if (isPhoneError) Color.Red else Color.DarkGray,
+                focusedLabelColor = if (isPhoneError) Color.Red else Azul,
+                unfocusedLabelColor = TextGray,
+                focusedTextColor = MainWhite,
+                unfocusedTextColor = MainWhite,
+                cursorColor = Azul,
+                focusedContainerColor = DarkBackground,
+                unfocusedContainerColor = DarkBackground,
+                errorLabelColor = Color.Red,
+                errorBorderColor = Color.Red,
+                errorLeadingIconColor = Color.Red
+            ),
+            singleLine = true
         )
 
         Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(32.dp))
 
         if (isLoading) {
-            CircularProgressIndicator(color = Crema)
+            CircularProgressIndicator(color = Azul)
         } else {
             Button(
                 onClick = {
-                    if (name.isNotEmpty() && phone.length == 9) {
-                        isLoading = true
+                    val isValidName = name.isNotBlank() && name.length >= 3
+                    val isValidPhone = phone.length == 9 && phone.startsWith("9")
 
+                    if (isValidName && isValidPhone) {
+                        isLoading = true
                         fun saveFirestoreData(uid: String) {
                             val saveData = { url: String ->
                                 val map = hashMapOf(
                                     "id" to uid,
-                                    "name" to name,
+                                    "name" to name.trim(),
                                     "phone" to phone,
                                     "email" to (auth.currentUser?.email ?: emailRecibido),
                                     "image" to url
@@ -211,18 +290,22 @@ fun ProfileScreen(
                                 }
                                 .addOnFailureListener {
                                     isLoading = false
-                                    Toast.makeText(context, "Error al crear cuenta", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Error: ${it.message}", Toast.LENGTH_SHORT).show()
                                 }
                         }
                     } else {
-                        Toast.makeText(context, "Completa el nombre y un teléfono de 9 dígitos", Toast.LENGTH_SHORT).show()
+                        if (!isValidName) Toast.makeText(context, "Ingresa un nombre válido", Toast.LENGTH_SHORT).show()
+                        if (!isValidPhone) Toast.makeText(context, "El celular debe empezar con 9 y tener 9 dígitos", Toast.LENGTH_SHORT).show()
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(25.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Crema)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .shadow(8.dp, RoundedCornerShape(16.dp), spotColor = Azul),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Azul)
             ) {
-                Text(text = "Guardar y Continuar", color = black, fontWeight = FontWeight.Bold)
+                Text(text = "Guardar y Continuar", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
         Spacer(modifier = Modifier.height(24.dp))

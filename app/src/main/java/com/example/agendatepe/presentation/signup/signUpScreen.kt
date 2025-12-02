@@ -1,6 +1,7 @@
 package com.example.agendatepe.presentation.signup
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,13 +33,50 @@ fun SingUpScreen(
     var passwordConfirm by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
+    // --- PROTECCIÓN DE SALIDA ---
+    var showExitDialog by remember { mutableStateOf(false) }
+
+    // Intercepta el botón físico "Atrás"
+    BackHandler {
+        if (email.isNotEmpty() || password.isNotEmpty()) showExitDialog = true
+        else onBack()
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("¿Cancelar registro?", color = MainWhite) },
+            text = { Text("Se perderán los datos ingresados.", color = TextGray) },
+            confirmButton = {
+                Button(
+                    onClick = { showExitDialog = false; onBack() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                ) { Text("Salir", color = Color.White) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) {
+                    Text("Continuar", color = MainWhite)
+                }
+            },
+            containerColor = DarkSurface
+        )
+    }
+    // ------------------------------------
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground) // Fondo negro
+            .background(DarkBackground)
             .padding(24.dp)
     ) {
-        IconButton(onClick = onBack, modifier = Modifier.offset(x = (-12).dp)) {
+        // Icono de Atrás con validación
+        IconButton(
+            onClick = {
+                if (email.isNotEmpty() || password.isNotEmpty()) showExitDialog = true
+                else onBack()
+            },
+            modifier = Modifier.offset(x = (-12).dp)
+        ) {
             Icon(Icons.Default.ArrowBack, contentDescription = "Atrás", tint = MainWhite)
         }
 
@@ -59,7 +97,8 @@ fun SingUpScreen(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MainBlue, unfocusedBorderColor = Color.DarkGray,
                 focusedLabelColor = MainBlue, unfocusedLabelColor = TextGray,
-                focusedTextColor = MainWhite, unfocusedTextColor = MainWhite, cursorColor = MainBlue
+                focusedTextColor = MainWhite, unfocusedTextColor = MainWhite, cursorColor = MainBlue,
+                focusedContainerColor = DarkBackground, unfocusedContainerColor = DarkBackground
             ),
             singleLine = true
         )
@@ -78,7 +117,8 @@ fun SingUpScreen(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MainBlue, unfocusedBorderColor = Color.DarkGray,
                 focusedLabelColor = MainBlue, unfocusedLabelColor = TextGray,
-                focusedTextColor = MainWhite, unfocusedTextColor = MainWhite, cursorColor = MainBlue
+                focusedTextColor = MainWhite, unfocusedTextColor = MainWhite, cursorColor = MainBlue,
+                focusedContainerColor = DarkBackground, unfocusedContainerColor = DarkBackground
             ),
             singleLine = true
         )
@@ -94,10 +134,11 @@ fun SingUpScreen(
             leadingIcon = { Icon(Icons.Default.Lock, null, tint = TextGray) },
             visualTransformation = PasswordVisualTransformation(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = if(password == passwordConfirm) MainBlue else Color.Red,
+                focusedBorderColor = if(password == passwordConfirm && password.isNotEmpty()) MainBlue else if (passwordConfirm.isNotEmpty()) Color.Red else Color.DarkGray,
                 unfocusedBorderColor = Color.DarkGray,
                 focusedLabelColor = MainBlue, unfocusedLabelColor = TextGray,
-                focusedTextColor = MainWhite, unfocusedTextColor = MainWhite, cursorColor = MainBlue
+                focusedTextColor = MainWhite, unfocusedTextColor = MainWhite, cursorColor = MainBlue,
+                focusedContainerColor = DarkBackground, unfocusedContainerColor = DarkBackground
             ),
             singleLine = true
         )

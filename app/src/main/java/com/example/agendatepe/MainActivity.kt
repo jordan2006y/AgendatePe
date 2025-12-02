@@ -1,13 +1,16 @@
 package com.example.agendatepe
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -28,17 +31,25 @@ class MainActivity : ComponentActivity() {
         setContent {
             navHostController = rememberNavController()
 
-            // 1. LÓGICA DE SESIÓN AUTOMÁTICA
-            // ¿Hay usuario? -> "home". ¿No hay? -> "initialScreen"
+            // 1. ESTADO GLOBAL DEL TEMA (Por defecto: Oscuro = true)
+            var isDarkTheme by remember { mutableStateOf(true) }
+
             val startDestination = if (auth.currentUser != null) "home" else "initialScreen"
 
-            AgendatePeTheme {
+            // 2. APLICAMOS EL TEMA AQUI PARA TODA LA APP
+            AgendatePeTheme(darkTheme = isDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // 2. PASAMOS EL DESTINO CALCULADO
-                    NavigationWrapper(navHostController, auth, startDestination)
+                    // 3. PASAMOS EL ESTADO Y LA FUNCIÓN PARA CAMBIARLO
+                    NavigationWrapper(
+                        navHostController = navHostController,
+                        auth = auth,
+                        startDestination = startDestination,
+                        isDarkTheme = isDarkTheme,
+                        onThemeChange = { isDarkTheme = !isDarkTheme }
+                    )
                 }
             }
         }

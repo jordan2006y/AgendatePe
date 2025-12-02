@@ -78,6 +78,7 @@ import com.google.maps.android.compose.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 // --- MODELO ---
 data class Propiedad(
@@ -101,16 +102,15 @@ fun Modifier.glassEffect(backgroundColor: Color = Azul.copy(alpha = 0.85f), bord
 fun HomeScreen(
     navigateToProfile: () -> Unit,
     onLogout: () -> Unit,
-    navigateToPublish: (String) -> Unit
+    navigateToPublish: (String) -> Unit,
+    isDarkTheme: Boolean,
+    onThemeChange: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val auth = Firebase.auth
     val currentUser = auth.currentUser
     val haptic = LocalHapticFeedback.current
-
-    // TEMA POR DEFECTO: OSCURO
-    var isDarkTheme by remember { mutableStateOf(true) }
 
     var isMapView by remember { mutableStateOf(false) }
     var isLoadingData by remember { mutableStateOf(true) }
@@ -196,94 +196,92 @@ fun HomeScreen(
     if (zoomImageSrc != null) ZoomableImageDialog(imageUrl = zoomImageSrc!!, onDismiss = { zoomImageSrc = null })
     if (showLogoutDialog) { AlertDialog(onDismissRequest = { showLogoutDialog = false }, title = { Text("¿Cerrar Sesión?") }, text = { Text("¿Estás seguro de que quieres salir?") }, confirmButton = { Button(onClick = { showLogoutDialog = false; onLogout() }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Cerrar Sesión", color = Color.White) } }, dismissButton = { TextButton(onClick = { showLogoutDialog = false }) { Text("Cancelar", color = MaterialTheme.colorScheme.onBackground) } }, containerColor = MaterialTheme.colorScheme.surface) }
 
-    AgendatePeTheme(darkTheme = isDarkTheme) {
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            floatingActionButton = {
-                Box(modifier = Modifier.padding(bottom = 80.dp).glassEffect(backgroundColor = Azul, shape = CircleShape).clickable { isMapView = !isMapView }.padding(horizontal = 24.dp, vertical = 16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Icon(imageVector = if (isMapView) Icons.Default.List else Icons.Default.Map, contentDescription = null, tint = Color.White); Spacer(modifier = Modifier.width(8.dp)); Text(text = if (isMapView) "Ver Lista" else "Ver Mapa", color = Color.White, fontWeight = FontWeight.Bold) }
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        floatingActionButton = {
+            Box(modifier = Modifier.padding(bottom = 80.dp).glassEffect(backgroundColor = Azul, shape = CircleShape).clickable { isMapView = !isMapView }.padding(horizontal = 24.dp, vertical = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) { Icon(imageVector = if (isMapView) Icons.Default.List else Icons.Default.Map, contentDescription = null, tint = Color.White); Spacer(modifier = Modifier.width(8.dp)); Text(text = if (isMapView) "Ver Lista" else "Ver Mapa", color = Color.White, fontWeight = FontWeight.Bold) }
+            }
+        }
+    ) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+
+            val tipoFiltro = if (filterSelected == "Comprar") "Venta" else "Alquiler"
+            val listaFiltrada = propiedadesList.filter { prop ->
+                val matchTipo = prop.tipo == tipoFiltro
+                val matchDistrito = selectedDistrito == "Todos" || prop.direccion.contains(selectedDistrito, ignoreCase = true)
+                val precioNum = prop.precio.toDoubleOrNull() ?: 0.0
+                val minP = minPrecio.toDoubleOrNull() ?: 0.0
+                val maxP = maxPrecio.toDoubleOrNull() ?: Double.MAX_VALUE
+                val matchPrecio = precioNum in minP..maxP
+                val matchHab = prop.habitaciones >= minHabitaciones
+                val matchTags = selectedTags.isEmpty() || prop.etiquetasEntorno.containsAll(selectedTags)
+                var matchNear = true
+                if (filterNearMe && userLocation != null) { val results = FloatArray(1); Location.distanceBetween(userLocation!!.latitude, userLocation!!.longitude, prop.lat, prop.lng, results); matchNear = results[0] <= 5000 }
+                matchTipo && matchDistrito && matchPrecio && matchHab && matchTags && matchNear
+            }
+
+            if (isMapView) {
+                GoogleMap(modifier = Modifier.fillMaxSize(), cameraPositionState = cameraPositionState, properties = mapProperties, uiSettings = mapUiSettings, onMapClick = { selectedProperty = null }) {
+                    listaFiltrada.forEach { propiedad ->
+                        Marker(
+                            state = MarkerState(position = LatLng(propiedad.lat, propiedad.lng)),
+                            title = propiedad.titulo,
+                            snippet = "${propiedad.moneda} ${propiedad.precio}",
+                            icon = LocationHelper.bitmapDescriptorFromVector(context, R.drawable.ic_custom_pin),
+                            onClick = { selectedProperty = propiedad.copy(); false }
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 180.dp, bottom = 100.dp, start = 16.dp, end = 16.dp)) {
+                    if (isLoadingData) { items(4) { SkeletonPropertyCard() } }
+                    else if (listaFiltrada.isEmpty()) { item { Box(modifier = Modifier.fillMaxWidth().height(400.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.HomeWork, null, tint = Color.Gray, modifier = Modifier.size(60.dp)); Spacer(modifier = Modifier.height(8.dp)); Text("No hay propiedades aquí", color = Color.Gray) } } } }
+                    else { items(listaFiltrada) { propiedad -> PropertyCard(propiedad = propiedad, isFavorite = propiedad.favoritos.contains(currentUser?.uid), onFavoriteClick = { toggleFavorite(propiedad) }, onClick = { selectedProperty = propiedad }) } }
                 }
             }
-        ) { paddingValues ->
-            Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
 
-                val tipoFiltro = if (filterSelected == "Comprar") "Venta" else "Alquiler"
-                val listaFiltrada = propiedadesList.filter { prop ->
-                    val matchTipo = prop.tipo == tipoFiltro
-                    val matchDistrito = selectedDistrito == "Todos" || prop.direccion.contains(selectedDistrito, ignoreCase = true)
-                    val precioNum = prop.precio.toDoubleOrNull() ?: 0.0
-                    val minP = minPrecio.toDoubleOrNull() ?: 0.0
-                    val maxP = maxPrecio.toDoubleOrNull() ?: Double.MAX_VALUE
-                    val matchPrecio = precioNum in minP..maxP
-                    val matchHab = prop.habitaciones >= minHabitaciones
-                    val matchTags = selectedTags.isEmpty() || prop.etiquetasEntorno.containsAll(selectedTags)
-                    var matchNear = true
-                    if (filterNearMe && userLocation != null) { val results = FloatArray(1); Location.distanceBetween(userLocation!!.latitude, userLocation!!.longitude, prop.lat, prop.lng, results); matchNear = results[0] <= 5000 }
-                    matchTipo && matchDistrito && matchPrecio && matchHab && matchTags && matchNear
-                }
-
-                if (isMapView) {
-                    GoogleMap(modifier = Modifier.fillMaxSize(), cameraPositionState = cameraPositionState, properties = mapProperties, uiSettings = mapUiSettings, onMapClick = { selectedProperty = null }) {
-                        listaFiltrada.forEach { propiedad ->
-                            Marker(
-                                state = MarkerState(position = LatLng(propiedad.lat, propiedad.lng)),
-                                title = propiedad.titulo,
-                                snippet = "${propiedad.moneda} ${propiedad.precio}",
-                                icon = LocationHelper.bitmapDescriptorFromVector(context, R.drawable.ic_custom_pin),
-                                onClick = { selectedProperty = propiedad.copy(); false }
-                            )
-                        }
-                    }
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 180.dp, bottom = 100.dp, start = 16.dp, end = 16.dp)) {
-                        if (isLoadingData) { items(4) { SkeletonPropertyCard() } }
-                        else if (listaFiltrada.isEmpty()) { item { Box(modifier = Modifier.fillMaxWidth().height(400.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.HomeWork, null, tint = Color.Gray, modifier = Modifier.size(60.dp)); Spacer(modifier = Modifier.height(8.dp)); Text("No hay propiedades aquí", color = Color.Gray) } } } }
-                        else { items(listaFiltrada) { propiedad -> PropertyCard(propiedad = propiedad, isFavorite = propiedad.favoritos.contains(currentUser?.uid), onFavoriteClick = { toggleFavorite(propiedad) }, onClick = { selectedProperty = propiedad }) } }
-                    }
-                }
-
-                // HEADER
-                Column(modifier = Modifier.align(Alignment.TopCenter).background(Brush.verticalGradient(colors = listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background.copy(alpha = 0.9f), Color.Transparent))).padding(top = 40.dp, start = 16.dp, end = 16.dp, bottom = 16.dp).fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            TextField(
-                                value = searchQuery, onValueChange = { onSearch(it) }, placeholder = { Text("Buscar zona...", color = TextGray) },
-                                modifier = Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)), shape = RoundedCornerShape(16.dp),
-                                colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface),
-                                leadingIcon = { Icon(Icons.Default.Search, null, tint = Azul) }, singleLine = true
-                            )
-                            if (searchResults.isNotEmpty()) {
-                                Card(modifier = Modifier.fillMaxWidth().padding(top = 56.dp).heightIn(max = 200.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(8.dp)) {
-                                    LazyColumn { items(searchResults) { res -> DropdownMenuItem(text = { Text(res.featureName ?: res.thoroughfare ?: "", color = MaterialTheme.colorScheme.onSurface) }, onClick = { scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(res.latitude, res.longitude), 15f), 1000) }; searchQuery = ""; searchResults = emptyList(); isMapView = true }, leadingIcon = { Icon(Icons.Default.Place, null, tint = TextGray) }) } }
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Azul).clickable { showFilterSheet = true }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Tune, null, tint = Color.White) }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box {
-                            Box(modifier = Modifier.size(48.dp).clip(CircleShape).border(2.dp, Azul, CircleShape).clickable { showProfileMenu = true }) {
-                                if (userImage.isNotEmpty()) Image(painter = rememberAsyncImagePainter(userImage), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape)) else Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(8.dp))
-                            }
-                            DropdownMenu(expanded = showProfileMenu, onDismissRequest = { showProfileMenu = false }, offset = DpOffset(x = (-10).dp, y = 8.dp), modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
-                                DropdownMenuItem(text = { Text(if(isDarkTheme) "Modo Claro" else "Modo Oscuro") }, onClick = { isDarkTheme = !isDarkTheme; showProfileMenu = false }, leadingIcon = { Icon(if(isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, null) })
-                                HorizontalDivider()
-                                DropdownMenuItem(text = { Text("Editar Perfil") }, onClick = { showProfileMenu = false; navigateToProfile() }, leadingIcon = { Icon(Icons.Default.Edit, null, tint = Azul) })
-                                DropdownMenuItem(text = { Text("Cerrar Sesión", color = Color.Red) }, onClick = { showProfileMenu = false; showLogoutDialog = true }, leadingIcon = { Icon(Icons.Default.ExitToApp, null, tint = Color.Red) })
+            // HEADER
+            Column(modifier = Modifier.align(Alignment.TopCenter).background(Brush.verticalGradient(colors = listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background.copy(alpha = 0.9f), Color.Transparent))).padding(top = 40.dp, start = 16.dp, end = 16.dp, bottom = 16.dp).fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        TextField(
+                            value = searchQuery, onValueChange = { onSearch(it) }, placeholder = { Text("Buscar zona...", color = TextGray) },
+                            modifier = Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)), shape = RoundedCornerShape(16.dp),
+                            colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface),
+                            leadingIcon = { Icon(Icons.Default.Search, null, tint = Azul) }, singleLine = true
+                        )
+                        if (searchResults.isNotEmpty()) {
+                            Card(modifier = Modifier.fillMaxWidth().padding(top = 56.dp).heightIn(max = 200.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(8.dp)) {
+                                LazyColumn { items(searchResults) { res -> DropdownMenuItem(text = { Text(res.featureName ?: res.thoroughfare ?: "", color = MaterialTheme.colorScheme.onSurface) }, onClick = { scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(res.latitude, res.longitude), 15f), 1000) }; searchQuery = ""; searchResults = emptyList(); isMapView = true }, leadingIcon = { Icon(Icons.Default.Place, null, tint = TextGray) }) } }
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item { SelectableChip(text = "Comprar", selected = filterSelected == "Comprar") { filterSelected = "Comprar" } }
-                        item { SelectableChip(text = "Alquilar", selected = filterSelected == "Alquilar") { filterSelected = "Alquilar" } }
-                        item { SelectableChip(text = "Cerca de mí", selected = filterNearMe, icon = Icons.Outlined.NearMe) { if (!hasLocationPermission) { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)) } else if (!checkGPSEnabled()) { requestEnableGPS() } else { fusedLocationClient.lastLocation.addOnSuccessListener { loc -> if (loc != null) userLocation = LatLng(loc.latitude, loc.longitude); filterNearMe = !filterNearMe } } } }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Azul).clickable { showFilterSheet = true }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Tune, null, tint = Color.White) }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box {
+                        Box(modifier = Modifier.size(48.dp).clip(CircleShape).border(2.dp, Azul, CircleShape).clickable { showProfileMenu = true }) {
+                            if (userImage.isNotEmpty()) Image(painter = rememberAsyncImagePainter(userImage), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape)) else Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(8.dp))
+                        }
+                        DropdownMenu(expanded = showProfileMenu, onDismissRequest = { showProfileMenu = false }, offset = DpOffset(x = (-10).dp, y = 8.dp), modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+                            DropdownMenuItem(text = { Text(if(isDarkTheme) "Modo Claro" else "Modo Oscuro") }, onClick = { onThemeChange(); showProfileMenu = false }, leadingIcon = { Icon(if(isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, null) })
+                            HorizontalDivider()
+                            DropdownMenuItem(text = { Text("Editar Perfil") }, onClick = { showProfileMenu = false; navigateToProfile() }, leadingIcon = { Icon(Icons.Default.Edit, null, tint = Azul) })
+                            DropdownMenuItem(text = { Text("Cerrar Sesión", color = Color.Red) }, onClick = { showProfileMenu = false; showLogoutDialog = true }, leadingIcon = { Icon(Icons.Default.ExitToApp, null, tint = Color.Red) })
+                        }
                     }
                 }
-
-                Column(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(onClick = { showPublishMenu = true }, modifier = Modifier.size(64.dp).glassEffect(backgroundColor = Azul, shape = CircleShape), shape = CircleShape, color = Color.Transparent) { Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) { Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(32.dp)) } }
+                Spacer(modifier = Modifier.height(16.dp))
+                LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { SelectableChip(text = "Comprar", selected = filterSelected == "Comprar") { filterSelected = "Comprar" } }
+                    item { SelectableChip(text = "Alquilar", selected = filterSelected == "Alquilar") { filterSelected = "Alquilar" } }
+                    item { SelectableChip(text = "Cerca de mí", selected = filterNearMe, icon = Icons.Outlined.NearMe) { if (!hasLocationPermission) { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)) } else if (!checkGPSEnabled()) { requestEnableGPS() } else { fusedLocationClient.lastLocation.addOnSuccessListener { loc -> if (loc != null) userLocation = LatLng(loc.latitude, loc.longitude); filterNearMe = !filterNearMe } } } }
                 }
+            }
+
+            Column(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Surface(onClick = { showPublishMenu = true }, modifier = Modifier.size(64.dp).glassEffect(backgroundColor = Azul, shape = CircleShape), shape = CircleShape, color = Color.Transparent) { Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) { Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(32.dp)) } }
             }
         }
     }
@@ -321,7 +319,7 @@ fun HomeScreen(
                         }
                     }
 
-                    // BOTÓN FAVORITO FLOTANTE (ARREGLADO Y ENCIMA DE TODO)
+                    // BOTÓN FAVORITO FLOTANTE
                     IconButton(
                         onClick = { toggleFavorite(propiedad) },
                         modifier = Modifier
@@ -382,9 +380,36 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // BOTONES DE ACCIÓN
+                // BOTÓN WHATSAPP MEJORADO (CON MENSAJE AUTOMÁTICO)
                 Button(
-                    onClick = { try { val url = "https://api.whatsapp.com/send?phone=51${propiedad.telefono}"; context.startActivity(Intent(Intent.ACTION_VIEW).apply { data = Uri.parse(url) }) } catch (e: Exception) {} },
+                    onClick = {
+                        try {
+                            // 1. Hora del día para el saludo
+                            val calendar = Calendar.getInstance()
+                            val hour = calendar.get(Calendar.HOUR_OF_DAY)
+                            val saludo = when (hour) {
+                                in 5..11 -> "buenos días"
+                                in 12..18 -> "buenas tardes"
+                                else -> "buenas noches"
+                            }
+
+                            // 2. Acción basada en el tipo de inmueble
+                            val accion = if (propiedad.tipo == "Venta") "comprar" else "alquilar"
+
+                            // 3. Construcción del mensaje
+                            val mensaje = "Hola, $saludo. Estoy interesado en $accion su propiedad: \"${propiedad.titulo}\" que vi en AgendatePe. ¿Podría brindarme más información?"
+
+                            // 4. Codificación y Envío
+                            val mensajeCodificado = Uri.encode(mensaje)
+                            val url = "https://api.whatsapp.com/send?phone=51${propiedad.telefono}&text=$mensajeCodificado"
+
+                            context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                                data = Uri.parse(url)
+                            })
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "No se pudo abrir WhatsApp", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth().height(56.dp).shadow(8.dp, RoundedCornerShape(16.dp), spotColor = Color(0xFF25D366)),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
                     shape = RoundedCornerShape(16.dp)
@@ -443,8 +468,6 @@ fun PropertyCard(propiedad: Propiedad, isFavorite: Boolean, onFavoriteClick: () 
                 Box(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp).glassEffect(backgroundColor = Azul.copy(alpha = 0.9f), shape = RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text("${propiedad.moneda} ${propiedad.precio}", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                 }
-
-                // CORAZÓN
                 IconButton(onClick = onFavoriteClick, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp).size(44.dp).background(Color.Black.copy(alpha = 0.4f), CircleShape)) {
                     Icon(imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, contentDescription = null, tint = if(isFavorite) Color(0xFFFF4081) else Color.White, modifier = Modifier.size(24.dp))
                 }
