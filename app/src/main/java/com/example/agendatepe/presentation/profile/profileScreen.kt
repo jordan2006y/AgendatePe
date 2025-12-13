@@ -206,7 +206,7 @@ fun ProfileScreen(
                     }
                 }
             },
-            label = { Text("Celular (Empieza con 9)") },
+            label = { Text("Celular") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             leadingIcon = { Icon(Icons.Default.Phone, null, tint = TextGray) },

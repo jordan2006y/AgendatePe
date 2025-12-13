@@ -104,9 +104,9 @@ fun InitialScreen(
 
             // Logo (Asegúrate de que tu logo tenga fondo transparente)
             Image(
-                painter = painterResource(id = R.drawable.ic_logo_inicio),
+                painter = painterResource(id = R.drawable.icn_inicio),
                 contentDescription = "Logo",
-                modifier = Modifier.size(180.dp),
+                modifier = Modifier.size(300.dp),
                 contentScale = ContentScale.Fit
             )
 

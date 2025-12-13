@@ -3,7 +3,7 @@ package com.example.agendatepe.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // Paleta Principal
-val MainBlue = Color(0xFF0056D2)
+val MainBlue = Color(0xFF1E30F0)
 val MainBlack = Color(0xFF121212)
 val MainWhite = Color(0xFFFFFFFF)
 val MainGray = Color(0xFFF5F5F5)
